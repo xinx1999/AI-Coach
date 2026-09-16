@@ -1,10 +1,46 @@
-import { exercises as rawExercises, getExercise } from '@bryllim/workout-guide';
+import catalog from './catalog.json';
 import type { Exercise, SetsRep, WorkoutExercise, WorkoutSession } from './types';
 
-export const allExercises: Exercise[] = rawExercises as unknown as Exercise[];
+/**
+ * 精简版动作索引（由 scripts/build-catalog.mjs 从 @bryllim/workout-guide 的 manifest 生成）。
+ * 不含 frames 与 attribution：图片路径可由 slug 推导，署名则统一维护在 attribution.ts。
+ * 相比直接 import 包的 `exercises`，打包体积从 386 KB 降到 46 KB。
+ */
+interface CatalogEntry {
+  slug: string;
+  name: string;
+  type: string;
+  eq: string;
+  muscle: string;
+  secondary: string[];
+  stretch: boolean;
+}
+
+export const allExercises: Exercise[] = (catalog as CatalogEntry[]).map((e) => ({
+  id: `exercise-${e.slug}`,
+  slug: e.slug,
+  name: e.name,
+  exerciseType: e.type as Exercise['exerciseType'],
+  equipment: e.eq,
+  primaryMuscle: e.muscle,
+  secondaryMuscles: e.secondary,
+  isStretch: e.stretch,
+  frames: [
+    { index: 1, path: `assets/${e.slug}/frame-1.png` },
+    { index: 2, path: `assets/${e.slug}/frame-2.png` },
+    { index: 3, path: `assets/${e.slug}/frame-3.png` },
+  ],
+}) as Exercise);
+
+const bySlug = new Map(allExercises.map((e) => [e.slug, e]));
 
 export function getExerciseByName(slug: string): Exercise | null {
-  return getExercise(slug) as Exercise | null;
+  return bySlug.get(slug) ?? null;
+}
+
+/** 按 slug 查动作，等价于包里的 getExercise */
+export function getExercise(slug: string): Exercise | null {
+  return bySlug.get(slug) ?? null;
 }
 
 /** 动作图统一放在 public/assets/<slug>/frame-N.png，不走 npm 包的 assets 目录 */

@@ -4,6 +4,7 @@ import BrowseView from './components/BrowseView';
 import BuildView from './components/BuildView';
 import HistoryView from './components/HistoryView';
 import { usePersistentState } from './lib/persist';
+import { ASSET_ATTRIBUTION, ATTRIBUTION_LINE } from './lib/attribution';
 import {
   ACTIVE_SESSION_KEY,
   DRAFT_NOTES_KEY,
@@ -155,6 +156,13 @@ export default function App() {
           />
         )}
         {screen === 'history' && <HistoryView />}
+
+        <footer className="app-footer">
+          {ATTRIBUTION_LINE}{' '}
+          <a href={ASSET_ATTRIBUTION.licenseUrl} target="_blank" rel="noreferrer noopener">
+            {ASSET_ATTRIBUTION.license}
+          </a>
+        </footer>
       </main>
 
       {finished && (
