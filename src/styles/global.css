@@ -891,6 +891,83 @@ a { color: var(--accent); text-decoration: none; }
 .detail-value { font-size: 13px; line-height: 1.6; }
 .detail-actions { margin-top: 4px; }
 
+/* ---------- 动作教程面板 ---------- */
+/*
+ * 内容为项目自撰（上游素材库只有插图，无文字教学），
+ * 因此底部固定标注「待专业校对」，视觉上也不要做得像权威教材。
+ */
+.guide-panel {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.guide-block { margin-bottom: 14px; }
+.guide-block:last-of-type { margin-bottom: 0; }
+.guide-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.guide-text { font-size: 13px; line-height: 1.65; }
+.guide-steps,
+.guide-list {
+  font-size: 13px;
+  line-height: 1.65;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.guide-steps { list-style: decimal; }
+.guide-steps li::marker { color: var(--accent); font-weight: 700; }
+.guide-list { list-style: none; padding-left: 14px; }
+.guide-list li { position: relative; }
+.guide-list li::before {
+  content: '·';
+  position: absolute;
+  left: -12px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+.guide-list-warn li::before { content: '!'; color: var(--accent); }
+.guide-empty { font-size: 12px; color: var(--text-muted); }
+.guide-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.75;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+/* 计时页里的教程速查，默认收起 */
+.guided-guide { margin-top: 12px; }
+.guided-guide-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.guided-guide-toggle:hover { color: var(--text); }
+.guided-guide-body {
+  margin-top: 10px;
+  padding: 12px 12px 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.guided-guide-body .guide-panel { border-top: none; padding-top: 0; }
+
 @media (max-width: 640px) {
   .detail-modal { max-width: 100%; max-height: 92vh; }
   .loc-tab { font-size: 12px; padding: 10px 8px; }

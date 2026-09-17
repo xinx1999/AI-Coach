@@ -7,13 +7,16 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   SkipForward,
   Dumbbell,
   Trash2,
+  BookOpen,
 } from 'lucide-react';
 import { getAssetPath } from '../lib/store';
 import { exerciseName, equipmentName, muscleName } from '../lib/zh';
 import type { TimerTab, WorkoutExercise, WorkoutSession } from '../lib/types';
+import GuidePanel from './GuidePanel';
 
 interface Props {
   session: WorkoutSession | null;
@@ -110,6 +113,7 @@ function GuidedTimer({
   const [phase, setPhase] = useState<'work' | 'rest'>('work');
   const [restRemaining, setRestRemaining] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const steps = useMemo(() => (session ? flattenSteps(session.exercises) : []), [session]);
@@ -388,6 +392,31 @@ function GuidedTimer({
                 {s}s
               </button>
             ))}
+          </div>
+
+          {/* 动作要领速查：默认收起，避免训练中信息过载；点开看要领与呼吸 */}
+          <div className="guided-guide">
+            <button
+              className="guided-guide-toggle"
+              onClick={() => setGuideOpen((v) => !v)}
+              aria-expanded={guideOpen}
+            >
+              <BookOpen size={14} />
+              动作要领
+              <ChevronDown
+                size={14}
+                style={{
+                  marginLeft: 'auto',
+                  transform: guideOpen ? 'rotate(180deg)' : 'none',
+                  transition: 'transform .15s',
+                }}
+              />
+            </button>
+            {guideOpen && (
+              <div className="guided-guide-body">
+                <GuidePanel slug={currentWorkoutEx.slug} compact />
+              </div>
+            )}
           </div>
         </div>
       )}

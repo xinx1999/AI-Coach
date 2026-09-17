@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { X, Plus, Check, MapPin } from 'lucide-react';
 import { getAssetPath, type ClassifiedExercise } from '../lib/store';
 import { exerciseName, equipmentName, muscleName, exerciseTypeName } from '../lib/zh';
+import GuidePanel from './GuidePanel';
 
 interface Props {
   exercise: ClassifiedExercise;
@@ -99,6 +100,10 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
             </p>
           </div>
         )}
+
+        <div className="detail-section">
+          <GuidePanel slug={exercise.slug} />
+        </div>
 
         <div className="detail-actions">
           {alreadyAdded ? (
