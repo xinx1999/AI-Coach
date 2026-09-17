@@ -9,3 +9,7 @@ dist/
 .playwright-cli/
 shot-*.png
 e2e-*.cjs
+# 帧分析脚本与临时渲染结果（排查动作图问题时用）
+.poses/
+cmp-*.png
+big-*.png

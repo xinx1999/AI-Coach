@@ -10,8 +10,22 @@ interface Props {
   onClose: () => void;
 }
 
-/** 三个关键姿势的阶段名 */
-const PHASE_LABELS = ['起始', '发力', '结束'] as const;
+/**
+ * 图注不再标注「起始 / 发力 / 结束」。
+ *
+ * 原因：这三帧并非同一动作的连续采样——上游 manifest 里只有 frame-1 带
+ * Everkinetic 来源链接，frame-2/3 没有；且 frame-2 的路径点数是 frame-1 的
+ * 1.08~4.45 倍（例如 bench-press 3532→11252），三帧两两前景重合度仅 5%~34%，
+ * 说明它们是三张各自独立的插画。
+ *
+ * 更关键的是顺序对不上：以卧推为例，frame-1 手臂伸直（顶端/结束位）、
+ * frame-2 肘弯沉胸（底端/起始位）、frame-3 又回到顶端。
+ * 按「起始→发力→结束」标注与实际姿势相反，属于错误信息。
+ *
+ * 既然无法逐一核实每个动作的语义，就不该给出看似权威的阶段名。
+ * 改为中性描述，只说这是动作的不同姿势，由用户对照自己的动作判断。
+ */
+const POSE_LABELS = ['姿势 1', '姿势 2', '姿势 3'] as const;
 
 export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose }: Props) {
   useEffect(() => {
@@ -52,17 +66,19 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
           </button>
         </div>
 
-        {/* 三个关键姿势并排对照 */}
+        {/* 三张动作插画并排，仅作姿势参考 */}
         <div className="pose-row">
           {([1, 2, 3] as const).map((f, i) => (
             <figure className="pose-cell" key={f}>
-              <img src={getAssetPath(exercise.slug, f)} alt={`${zhName} 第 ${i + 1} 个姿势`} />
-              <figcaption className="pose-label">{PHASE_LABELS[i]}</figcaption>
+              <img src={getAssetPath(exercise.slug, f)} alt={`${zhName} 姿势参考 ${i + 1}`} />
+              <figcaption className="pose-label">{POSE_LABELS[i]}</figcaption>
             </figure>
           ))}
         </div>
 
-        <p className="pose-caption">从左到右为动作的起始、发力与结束姿势，可对照判断自己的动作是否到位</p>
+        <p className="pose-caption">
+          三张图为同一动作的不同姿势，可对照检查自己的动作是否到位。
+        </p>
 
         <div className="detail-attrs">
           <span className="detail-tag">
