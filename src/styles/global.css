@@ -801,7 +801,7 @@ a { color: var(--accent); text-decoration: none; }
   object-fit: contain;
   display: block;
   opacity: 0;
-  transition: opacity 320ms ease-in-out;
+  transition: opacity 260ms ease-in-out;
 }
 .demo-layer.visible { opacity: 1; }
 .demo-dots {
@@ -817,7 +817,7 @@ a { color: var(--accent); text-decoration: none; }
   height: 6px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.28);
-  transition: all 320ms ease-in-out;
+  transition: all 260ms ease-in-out;
 }
 .demo-dot.on {
   background: var(--accent);

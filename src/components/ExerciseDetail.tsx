@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Plus, Check, Play, Pause, MapPin } from 'lucide-react';
 import { getAssetPath, type ClassifiedExercise } from '../lib/store';
 import { exerciseName, equipmentName, muscleName, exerciseTypeName } from '../lib/zh';
@@ -10,26 +10,36 @@ interface Props {
   onClose: () => void;
 }
 
-const FRAME_MS = 1100; // 每帧停留时长
+const FRAME_MS = 700; // 中间帧停留（运动过程中，走得快）
+const ENDPOINT_MS = 1000; // 两端极限位置的停留（第 1、3 帧，模拟动作顶点/底点的短暂停顿）
 
 /**
- * 三帧循环动画。
+ * 动作演示动画。
  *
- * 做法上有个关键点：三张图**同时叠放在 DOM 里**，靠 CSS opacity 交叉淡入淡出切换，
- * 而不是替换 <img src>。原因是替换 src 会产生硬切换（瞬间跳帧），
- * 视觉上像幻灯片翻页；叠放 + opacity 过渡则是渐变，观感接近真实运动。
- * 这样第 3 帧回到第 1 帧同样是渐变，不会在循环接缝处出现突兀的跳变。
+ * 两层关键设计：
  *
+ * 1) **往复循环而非单向**：序列是 1→2→3→2→1→2…，而不是 1→2→3→1。
+ *    健身动作从起始姿势到结束姿势再回到起始，本身就是「离心-向心」两个阶段，
+ *    往复播放既符合生理节律，又把视觉帧数翻了一倍，明显更顺。
+ *    单向循环时第 3 帧直接跳回第 1 帧，接缝处的姿态突变是生硬感的主要来源。
+ *
+ * 2) **两端停留更久**：动作在极限位置（最低点/最高点）本就会有短暂停顿，
+ *    所以第 1、3 帧停留 1000ms，中间帧 700ms。等时长的帧会显得机械。
+ *
+ * 三张图同时叠放在 DOM 里，靠 CSS opacity 交叉淡入淡出切换，而非替换 <img src>：
+ * 替换 src 是硬切换（瞬间跳帧），叠放 + opacity 过渡才是渐变。
  * 另外先把三张图全部预加载完成再开始播放，否则首轮切换会因未解码而闪白。
  */
 function useFrameAnimation(slug: string, playing: boolean) {
   const [frame, setFrame] = useState<1 | 2 | 3>(1);
   const [ready, setReady] = useState(false);
+  const dirRef = useRef<1 | -1>(1); // 播放方向：1 前进，-1 倒退
 
   useEffect(() => {
     let alive = true;
     setReady(false);
     setFrame(1);
+    dirRef.current = 1;
     const imgs = ([1, 2, 3] as const).map((f) => {
       const img = new Image();
       img.src = getAssetPath(slug, f);
@@ -54,11 +64,31 @@ function useFrameAnimation(slug: string, playing: boolean) {
 
   useEffect(() => {
     if (!playing || !ready) return;
-    const t = setInterval(() => {
-      setFrame((f) => (f === 1 ? 2 : f === 2 ? 3 : 1));
-    }, FRAME_MS);
-    return () => clearInterval(t);
-  }, [playing, ready]);
+
+    // 用 setTimeout 递归而非 setInterval：每帧停留时长不同
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      setFrame((f) => {
+        let next = (f + dirRef.current) as 1 | 2 | 3;
+        // 到达两端就掉头，形成往复
+        if (next > 3) {
+          dirRef.current = -1;
+          next = 2;
+        } else if (next < 1) {
+          dirRef.current = 1;
+          next = 2;
+        }
+        return next;
+      });
+      // 两端的停留时间更长
+      const hold = frame === 1 || frame === 3 ? ENDPOINT_MS : FRAME_MS;
+      timer = setTimeout(tick, hold);
+    };
+
+    const hold = frame === 1 || frame === 3 ? ENDPOINT_MS : FRAME_MS;
+    timer = setTimeout(tick, hold);
+    return () => clearTimeout(timer);
+  }, [playing, ready, frame]);
 
   return { frame, ready };
 }
@@ -138,7 +168,7 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
         </div>
 
         <p className="demo-caption">
-          {playing ? '循环演示动作的三个关键帧' : '已暂停，点击播放继续观看'}
+          {playing ? '往复循环演示，两端为动作的起止位置' : '已暂停，点击播放继续观看'}
         </p>
 
         <div className="detail-attrs">
