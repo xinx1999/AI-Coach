@@ -931,3 +931,243 @@ a { color: var(--accent); text-decoration: none; }
   .guided-count { font-size: 36px; }
   .modal-card { padding: 28px 24px; }
 }
+
+/* ---------- 计划生成向导 ---------- */
+.wizard-intro {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.wizard-block {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+}
+.wizard-block-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 12px;
+}
+.wizard-block-note {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent);
+}
+
+/* 身体数据 */
+.wizard-field-row { display: flex; gap: 12px; }
+.wizard-field { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.wizard-field-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.wizard-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  transition: border-color 0.15s ease;
+}
+.wizard-input:focus { outline: none; border-color: var(--accent); }
+.wizard-input.invalid { border-color: var(--red); }
+
+.bmi-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.bmi-preview-value { font-weight: 700; color: var(--text); font-family: var(--font-mono); }
+.bmi-preview-badge {
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.bmi-preview-hint { margin-left: auto; font-size: 11px; }
+.bmi-preview-error { color: var(--red); }
+
+/* BMI 分级配色：偏瘦=蓝 正常=绿 超重=橙 偏胖=红 */
+.bmi-偏瘦 { background: rgba(96, 165, 250, 0.14); color: #60A5FA; border-color: rgba(96, 165, 250, 0.3); }
+.bmi-正常 { background: rgba(74, 222, 128, 0.14); color: var(--green); border-color: rgba(74, 222, 128, 0.3); }
+.bmi-超重 { background: var(--accent-glow); color: var(--accent); border-color: rgba(232, 114, 42, 0.3); }
+.bmi-偏胖 { background: rgba(248, 113, 113, 0.14); color: var(--red); border-color: rgba(248, 113, 113, 0.3); }
+
+/* 分段选择（场地 / 水平） */
+.wizard-seg { display: flex; gap: 8px; }
+.wizard-seg-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 12px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+.wizard-seg-btn:hover { border-color: var(--text-muted); }
+.wizard-seg-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.wizard-seg-hint { font-size: 10px; font-weight: 500; opacity: 0.75; }
+
+/* 肌群选择 */
+.wizard-muscles { display: flex; flex-wrap: wrap; gap: 7px; }
+.muscle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+.muscle-chip:hover { border-color: var(--text-muted); color: var(--text); }
+.muscle-chip.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.muscle-chip.unreachable { opacity: 0.55; }
+.muscle-chip.unreachable.active { opacity: 1; }
+.muscle-chip-count {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  opacity: 0.6;
+  padding-left: 2px;
+}
+
+.wizard-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+.wizard-generate {
+  width: 100%;
+  justify-content: center;
+  padding: 13px;
+  font-size: 15px;
+  margin-bottom: 14px;
+}
+.wizard-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 结果预览 */
+.wizard-result {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+.wizard-result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.wizard-result-summary { font-size: 15px; font-weight: 700; }
+.wizard-result-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+.wizard-result-advice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.wizard-result-advice .bmi-preview-badge { flex-shrink: 0; }
+
+.wizard-warnings { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.wizard-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--accent-glow);
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.wizard-plan-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+.wizard-plan-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+}
+.wizard-plan-item:hover { background: var(--surface-2); }
+/* 动作图是白色填充的 SVG，必须放在深色底上才看得见 */
+.wizard-plan-item img {
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.wizard-plan-index {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  min-width: 16px;
+}
+.wizard-plan-info { min-width: 0; }
+.wizard-plan-name { font-size: 13px; font-weight: 600; }
+.wizard-plan-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.wizard-apply { width: 100%; justify-content: center; padding: 13px; font-size: 15px; }
+
+@media (max-width: 640px) {
+  .wizard-field-row { flex-direction: column; gap: 10px; }
+  .bmi-preview-hint { margin-left: 0; width: 100%; }
+  .muscle-chip { font-size: 11px; padding: 6px 9px; }
+}

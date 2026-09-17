@@ -47,6 +47,6 @@ export interface WorkoutSession {
   completedAt?: string;
 }
 
-export type Screen = 'timer' | 'browse' | 'build' | 'history';
+export type Screen = 'timer' | 'browse' | 'plan' | 'build' | 'history';
 
 export type TimerTab = 'guided' | 'interval';

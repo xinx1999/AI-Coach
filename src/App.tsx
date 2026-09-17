@@ -3,6 +3,7 @@ import TimerView from './components/TimerView';
 import BrowseView from './components/BrowseView';
 import BuildView from './components/BuildView';
 import HistoryView from './components/HistoryView';
+import PlanWizard from './components/PlanWizard';
 import { usePersistentState } from './lib/persist';
 import { ASSET_ATTRIBUTION, ATTRIBUTION_LINE } from './lib/attribution';
 import {
@@ -15,9 +16,9 @@ import {
   type ClassifiedExercise,
 } from './lib/store';
 import type { Screen, WorkoutExercise, WorkoutSession } from './lib/types';
-import { Timer, Search, Plus, History } from 'lucide-react';
+import { Timer, Search, Plus, History, Sparkles } from 'lucide-react';
 
-const SCREENS: Screen[] = ['timer', 'browse', 'build', 'history'];
+const SCREENS: Screen[] = ['timer', 'browse', 'plan', 'build', 'history'];
 
 function getInitialScreen(): Screen {
   const hash = window.location.hash.replace('#', '') as Screen;
@@ -102,8 +103,18 @@ export default function App() {
     setScreen('build');
   }, [setSession]);
 
+  /** 计划生成后覆盖编排页，并跳过去让用户过目 */
+  const handleApplyPlan = useCallback(
+    (exercises: WorkoutExercise[]) => {
+      setWorkout(exercises);
+      setScreen('build');
+    },
+    [setWorkout],
+  );
+
   const navItems: Array<{ id: Screen; label: string; icon: React.ReactElement }> = [
     { id: 'browse', label: '浏览', icon: <Search size={16} /> },
+    { id: 'plan', label: '计划', icon: <Sparkles size={16} /> },
     { id: 'build', label: '编排', icon: <Plus size={16} /> },
     { id: 'timer', label: '计时', icon: <Timer size={16} /> },
     { id: 'history', label: '历史', icon: <History size={16} /> },
@@ -136,6 +147,7 @@ export default function App() {
         {screen === 'browse' && (
           <BrowseView onSelect={handleAddToWorkout} selectedSlugs={selectedSlugs} />
         )}
+        {screen === 'plan' && <PlanWizard onApply={handleApplyPlan} />}
         {screen === 'build' && (
           <BuildView
             workout={workout}

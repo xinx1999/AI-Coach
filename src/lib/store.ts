@@ -76,6 +76,40 @@ export function countByLocation(loc: Location): number {
   return classifiedExercises.filter((e) => e.location === loc).length;
 }
 
+/**
+ * 各肌群的动作数量，按场地拆分。
+ * 计划生成器需要据此提示「某部位在某场地没有动作」，
+ * 否则用户选了「在家 + 内收肌」只会拿到一组健身房器械动作，且毫无解释。
+ */
+export interface MuscleStat {
+  muscle: string;
+  total: number;
+  home: number;
+  gym: number;
+}
+
+export const muscleStats: MuscleStat[] = (() => {
+  const map = new Map<string, MuscleStat>();
+  for (const e of classifiedExercises) {
+    let s = map.get(e.primaryMuscle);
+    if (!s) {
+      s = { muscle: e.primaryMuscle, total: 0, home: 0, gym: 0 };
+      map.set(e.primaryMuscle, s);
+    }
+    s.total++;
+    s[e.location]++;
+  }
+  // 动作多的肌群排前面，方便选择时优先看到常用部位
+  return [...map.values()].sort((a, b) => b.total - a.total);
+})();
+
+/** 某肌群在指定场地的可选动作数 */
+export function countByMuscle(muscle: string, loc: Location): number {
+  const s = muscleStats.find((m) => m.muscle === muscle);
+  if (!s) return 0;
+  return loc === 'home' ? s.home : s.gym;
+}
+
 /** 动作图统一放在 public/assets/<slug>/frame-N.svg，不走 npm 包的 assets 目录 */
 export function getAssetPath(slug: string, frame: 1 | 2 | 3): string {
   return `/assets/${slug}/frame-${frame}.svg`;
@@ -93,8 +127,13 @@ function makeSets(count = 3): SetsRep[] {
   }));
 }
 
-export function createWorkoutExercise(exercise: Exercise): WorkoutExercise {
-  return { exercise, slug: exercise.slug, sets: makeSets() };
+/**
+ * 由动作创建一条编排项。
+ * setCount 可指定初始组数——计划生成器会按水平与 BMI 给出 2~4 组，
+ * 默认值 3 保持既有行为不变。
+ */
+export function createWorkoutExercise(exercise: Exercise, setCount = 3): WorkoutExercise {
+  return { exercise, slug: exercise.slug, sets: makeSets(setCount) };
 }
 
 export function updateSet(
