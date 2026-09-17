@@ -680,6 +680,51 @@ a { color: var(--accent); text-decoration: none; }
 .modal-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
 
+/* 三按钮弹窗（如「有进行中的训练」）：两个次要操作并排，主操作占满一行 */
+.modal-actions-3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.modal-actions-3 > .btn {
+  flex: 1 1 0;
+  min-width: 92px;
+  justify-content: center;
+  white-space: nowrap;
+}
+.modal-actions-3 > .btn-primary { flex-basis: 100%; order: 3; }
+.modal-actions-3 > .btn-secondary { order: 1; }
+
+/* 弹窗正文较长时需要左对齐，居中会让多行说明很难读 */
+.modal-sub-block {
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  line-height: 1.65;
+  margin-bottom: 22px;
+}
+.modal-sub-block strong { color: var(--text); font-weight: 700; }
+.modal-facts {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+.modal-fact {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.modal-fact svg { color: var(--accent); flex-shrink: 0; }
+
 /* ---------- 场地分类 Tab ---------- */
 .loc-tabs {
   display: flex;

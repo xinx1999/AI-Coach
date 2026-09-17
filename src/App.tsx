@@ -16,7 +16,7 @@ import {
   type ClassifiedExercise,
 } from './lib/store';
 import type { Screen, WorkoutExercise, WorkoutSession } from './lib/types';
-import { Timer, Search, Plus, History, Sparkles } from 'lucide-react';
+import { Timer, Search, Plus, History, Sparkles, Dumbbell, Check } from 'lucide-react';
 
 const SCREENS: Screen[] = ['timer', 'browse', 'plan', 'build', 'history'];
 
@@ -44,6 +44,8 @@ export default function App() {
   );
   const [notes, setNotes] = usePersistentState<string>(DRAFT_NOTES_KEY, '');
   const [finished, setFinished] = useState<WorkoutSession | null>(null);
+  /** 待确认的新计划：有进行中的训练时先暂存，等用户确认再写入 */
+  const [pendingPlan, setPendingPlan] = useState<WorkoutExercise[] | null>(null);
 
   useEffect(() => {
     window.location.hash = screen;
@@ -103,14 +105,30 @@ export default function App() {
     setScreen('build');
   }, [setSession]);
 
-  /** 计划生成后覆盖编排页，并跳过去让用户过目 */
+  /**
+   * 计划生成后覆盖编排页。
+   * 若此时有进行中的训练，先弹确认：旧训练与新旧计划对不上，
+   * 直接覆盖会让用户看到「编排是 A、计时里却是 B」的错乱。
+   */
   const handleApplyPlan = useCallback(
     (exercises: WorkoutExercise[]) => {
+      if (session) {
+        setPendingPlan(exercises);
+        return;
+      }
       setWorkout(exercises);
       setScreen('build');
     },
-    [setWorkout],
+    [session, setWorkout],
   );
+
+  /** 确认用新计划替换：丢弃旧训练，写入新编排 */
+  const confirmApplyPlan = useCallback(() => {
+    if (pendingPlan) setWorkout(pendingPlan);
+    setPendingPlan(null);
+    setSession(null);
+    setScreen('build');
+  }, [pendingPlan, setWorkout, setSession]);
 
   const navItems: Array<{ id: Screen; label: string; icon: React.ReactElement }> = [
     { id: 'browse', label: '浏览', icon: <Search size={16} /> },
@@ -137,7 +155,13 @@ export default function App() {
               {id === 'build' && workout.length > 0 && (
                 <span className="nav-badge">{workout.length}</span>
               )}
-              {id === 'timer' && session && <span className="nav-dot" />}
+              {/* 计时页有进行中的训练时标个点，鼠标悬停说明是什么，避免用户不知道点进去会看到什么 */}
+              {id === 'timer' && session && (
+                <span
+                  className="nav-dot"
+                  title={`进行中：${session.exercises.length} 个动作（${session.name}）`}
+                />
+              )}
             </button>
           ))}
         </nav>
@@ -198,6 +222,44 @@ export default function App() {
               </button>
               <button className="btn btn-primary" onClick={() => setFinished(null)}>
                 继续
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 有进行中的训练时，覆盖编排前先确认，避免用户悄悄丢掉半程记录 */}
+      {pendingPlan && session && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="modal-emoji">⚠️</div>
+            <h2 className="modal-title">有进行中的训练</h2>
+            <div className="modal-sub-block">
+              你还有一次没结束的训练，用新计划会替换编排页，并结束这次训练。
+            </div>
+            <div className="modal-facts">
+              <span className="modal-fact">
+                <Dumbbell size={13} /> {session.exercises.length} 个动作
+              </span>
+              <span className="modal-fact">
+                <Check size={13} /> {countSets(session.exercises)} 组
+              </span>
+              <span className="modal-fact">
+                <Timer size={13} /> {session.name}
+              </span>
+            </div>
+            <div className="modal-sub-block" style={{ marginTop: 14 }}>
+              被结束的这次训练<strong>不会</strong>存入历史记录。
+            </div>
+            <div className="modal-actions-3">
+              <button className="btn btn-secondary" onClick={() => setPendingPlan(null)}>
+                取消
+              </button>
+              <button className="btn btn-secondary" onClick={() => setScreen('timer')}>
+                先去完成
+              </button>
+              <button className="btn btn-primary" onClick={confirmApplyPlan}>
+                仍要替换
               </button>
             </div>
           </div>

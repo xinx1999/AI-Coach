@@ -240,6 +240,20 @@ function GuidedTimer({
     );
   }
 
+  // 进行中的训练必须有动作；若为空（历史遗留的坏数据），引导用户重开而不是渲染空壳
+  if (session.exercises.length === 0) {
+    return (
+      <div className="empty-state">
+        <Dumbbell size={40} color="var(--text-muted)" />
+        <h3>这次训练里没有动作</h3>
+        <p>可能上次编排被清空了。丢弃它，重新安排今天的动作即可。</p>
+        <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={onDiscardSession}>
+          丢弃并去编排
+        </button>
+      </div>
+    );
+  }
+
   const totalSets = steps.length;
   const doneSets = Math.min(cursor, totalSets);
   // 全部组勾完：停在待确认状态，而不是立刻结算，给用户反悔的余地
