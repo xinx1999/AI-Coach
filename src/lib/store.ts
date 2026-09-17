@@ -34,13 +34,46 @@ export const allExercises: Exercise[] = (catalog as CatalogEntry[]).map((e) => (
 
 const bySlug = new Map(allExercises.map((e) => [e.slug, e]));
 
-export function getExerciseByName(slug: string): Exercise | null {
+/** 按 slug 查动作 */
+export function getExercise(slug: string): Exercise | null {
   return bySlug.get(slug) ?? null;
 }
 
-/** 按 slug 查动作，等价于包里的 getExercise */
-export function getExercise(slug: string): Exercise | null {
-  return bySlug.get(slug) ?? null;
+// ---------- 场地分类（在家 / 健身房） ----------
+
+export type Location = 'home' | 'gym';
+
+/**
+ * 器械 → 场地归属。
+ * 划分依据是「是否需要健身房固定器械」：
+ * 徒手、哑铃、弹力带、壶铃以及家用杂物（椅子/毛巾/门框/墙面）在家即可完成；
+ * 杠铃、龙门架、固定器械，以及单杠/卧推凳/有氧器械/杠铃片（家庭不一定具备）归健身房。
+ * 未列出的器械按健身房处理，避免把需要器械的动作误判为徒手可做。
+ */
+const GYM_EQUIPMENT = new Set([
+  'Machine',
+  'Barbell',
+  'Cable',
+  'Pull-up Bar',
+  'Bench',
+  'Cardio',
+  'Plate',
+]);
+
+export function toLocation(equipment: string): Location {
+  return GYM_EQUIPMENT.has(equipment) ? 'gym' : 'home';
+}
+
+/** 给动作打上场地标记（在原对象上扩展一个字段，不改变原有结构） */
+export type ClassifiedExercise = Exercise & { location: Location };
+
+export const classifiedExercises: ClassifiedExercise[] = allExercises.map((e) => ({
+  ...e,
+  location: toLocation(e.equipment),
+}));
+
+export function countByLocation(loc: Location): number {
+  return classifiedExercises.filter((e) => e.location === loc).length;
 }
 
 /** 动作图统一放在 public/assets/<slug>/frame-N.png，不走 npm 包的 assets 目录 */
@@ -136,17 +169,4 @@ export const ACTIVE_SESSION_KEY = 'strong-trainer-active-session';
 /** 一次训练里所有组的总数 */
 export function countSets(workout: WorkoutExercise[]): number {
   return workout.reduce((sum, w) => sum + w.sets.length, 0);
-}
-
-/** 已完成的组数 */
-export function countCompletedSets(workout: WorkoutExercise[]): number {
-  return workout.reduce((sum, w) => sum + w.sets.filter((s) => s.completed).length, 0);
-}
-
-/** 训练总容量（次数 × 重量），只统计同时填了次数和重量的组 */
-export function totalVolume(workout: WorkoutExercise[]): number {
-  return workout.reduce(
-    (sum, w) => sum + w.sets.reduce((s, set) => s + (set.reps ?? 0) * (set.weight ?? 0), 0),
-    0,
-  );
 }

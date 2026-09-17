@@ -1,20 +1,28 @@
 ﻿import { useState, useMemo, useCallback } from 'react';
-import { Search, Plus, X } from 'lucide-react';
-import { allExercises, getAssetPath } from '../lib/store';
+import { Search, X, Home, Dumbbell, LayoutGrid } from 'lucide-react';
+import { classifiedExercises, getAssetPath, countByLocation, type ClassifiedExercise, type Location } from '../lib/store';
 import { exerciseName, equipmentName, muscleName } from '../lib/zh';
-import type { Exercise } from '../lib/types';
+import ExerciseDetail from './ExerciseDetail';
 
 interface Props {
-  onSelect: (ex: Exercise) => void;
+  onSelect: (ex: ClassifiedExercise) => void;
   selectedSlugs: string[];
 }
 
-const MUSCLES = [...new Set(allExercises.map((e) => e.primaryMuscle))].sort();
-const EQUIPMENT = [...new Set(allExercises.map((e) => e.equipment))].sort();
+type LocationTab = 'all' | Location;
+
+const TABS: { key: LocationTab; label: string; icon: typeof Home }[] = [
+  { key: 'all', label: '全部', icon: LayoutGrid },
+  { key: 'home', label: '在家', icon: Home },
+  { key: 'gym', label: '健身房', icon: Dumbbell },
+];
+
+const MUSCLES = [...new Set(classifiedExercises.map((e) => e.primaryMuscle))].sort();
+const EQUIPMENT = [...new Set(classifiedExercises.map((e) => e.equipment))].sort();
 
 // 每个动作预先算好一份可搜索的中英文字符串，避免每次输入都重算
 const SEARCH_INDEX = new Map(
-  allExercises.map((e) => [
+  classifiedExercises.map((e) => [
     e.slug,
     [
       exerciseName(e.slug, e.name),
@@ -35,31 +43,53 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
   const [query, setQuery] = useState('');
   const [muscle, setMuscle] = useState('');
   const [equipment, setEquipment] = useState('');
+  const [locTab, setLocTab] = useState<LocationTab>('all');
+  const [detail, setDetail] = useState<ClassifiedExercise | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return allExercises.filter((e) => {
+    return classifiedExercises.filter((e) => {
+      if (locTab !== 'all' && e.location !== locTab) return false;
       if (muscle && e.primaryMuscle !== muscle) return false;
       if (equipment && e.equipment !== equipment) return false;
       if (q && !SEARCH_INDEX.get(e.slug)?.includes(q)) return false;
       return true;
     });
-  }, [query, muscle, equipment]);
+  }, [query, muscle, equipment, locTab]);
 
-  const handleSelect = useCallback(
-    (e: Exercise) => {
+  const handleAdd = useCallback(
+    (e: ClassifiedExercise) => {
       if (!selectedSlugs.includes(e.slug)) onSelect(e);
+      setDetail(null);
     },
     [onSelect, selectedSlugs],
   );
 
-  const hasFilter = Boolean(query || muscle || equipment);
+  const hasFilter = Boolean(query || muscle || equipment || locTab !== 'all');
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
       <div className="section-row">
         <h2 style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em' }}>浏览动作</h2>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{filtered.length} 个动作</span>
+      </div>
+
+      {/* 场地分类 */}
+      <div className="loc-tabs">
+        {TABS.map(({ key, label, icon: Icon }) => {
+          const n = key === 'all' ? classifiedExercises.length : countByLocation(key);
+          return (
+            <button
+              key={key}
+              className={`loc-tab ${locTab === key ? 'active' : ''}`}
+              onClick={() => setLocTab(key)}
+            >
+              <Icon size={15} />
+              <span>{label}</span>
+              <span className="loc-tab-count">{n}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="search-wrap">
@@ -71,7 +101,7 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
           onChange={(e) => setQuery(e.target.value)}
         />
         {query && (
-          <button className="search-clear" onClick={() => setQuery('')} title="清空">
+          <button className="search-clear" onClick={() => setQuery('')} title="清空" aria-label="清空搜索">
             <X size={14} />
           </button>
         )}
@@ -127,6 +157,7 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
                 setQuery('');
                 setMuscle('');
                 setEquipment('');
+                setLocTab('all');
               }}
             >
               清空筛选
@@ -141,8 +172,16 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
               <div
                 key={e.slug}
                 className="exercise-card"
-                onClick={() => handleSelect(e)}
-                style={alreadyAdded ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
+                onClick={() => setDetail(e)}
+                role="button"
+                tabIndex={0}
+                aria-label={`查看 ${exerciseName(e.slug, e.name)} 详情`}
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault();
+                    setDetail(e);
+                  }
+                }}
               >
                 <img src={getAssetPath(e.slug, 1)} alt={e.name} loading="lazy" />
                 <div className="exercise-card-info">
@@ -151,11 +190,9 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
                     {muscleName(e.primaryMuscle)} · {equipmentName(e.equipment)}
                   </div>
                 </div>
-                {!alreadyAdded && (
-                  <button className="exercise-card-add" aria-label="添加到训练">
-                    <Plus size={14} strokeWidth={3} />
-                  </button>
-                )}
+                <span className={`loc-badge ${e.location}`}>
+                  {e.location === 'home' ? '在家' : '健身房'}
+                </span>
                 {alreadyAdded && (
                   <div className="exercise-card-checked">
                     <svg
@@ -177,6 +214,16 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
           })}
         </div>
       )}
+
+      {detail && (
+        <ExerciseDetail
+          exercise={detail}
+          alreadyAdded={selectedSlugs.includes(detail.slug)}
+          onAdd={handleAdd}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </div>
   );
 }
+

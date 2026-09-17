@@ -12,8 +12,9 @@ import {
   countSets,
   createWorkoutExercise,
   recordSession,
+  type ClassifiedExercise,
 } from './lib/store';
-import type { Exercise, Screen, WorkoutExercise, WorkoutSession } from './lib/types';
+import type { Screen, WorkoutExercise, WorkoutSession } from './lib/types';
 import { Timer, Search, Plus, History } from 'lucide-react';
 
 const SCREENS: Screen[] = ['timer', 'browse', 'build', 'history'];
@@ -50,7 +51,7 @@ export default function App() {
   const selectedSlugs = useMemo(() => workout.map((w) => w.slug), [workout]);
 
   const handleAddToWorkout = useCallback(
-    (exercise: Exercise) => {
+    (exercise: ClassifiedExercise) => {
       setWorkout((prev) =>
         prev.some((w) => w.slug === exercise.slug)
           ? prev

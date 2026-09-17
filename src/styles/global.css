@@ -680,6 +680,211 @@ a { color: var(--accent); text-decoration: none; }
 .modal-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
 
+/* ---------- 场地分类 Tab ---------- */
+.loc-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.loc-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: all 0.16s ease;
+}
+.loc-tab:hover { border-color: var(--accent); color: var(--text); }
+.loc-tab.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.loc-tab-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.loc-tab.active .loc-tab-count {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 卡片上的场地角标 */
+.loc-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 99px;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.loc-badge.home { background: rgba(74, 222, 128, 0.16); color: var(--green); }
+.loc-badge.gym { background: rgba(232, 114, 42, 0.16); color: var(--accent); }
+
+/* ---------- 动作详情弹窗 ---------- */
+.detail-modal {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px;
+  text-align: left;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.detail-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.detail-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+.icon-btn:hover { background: var(--border); color: var(--text); }
+
+/* 动画演示区 */
+.demo-stage {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.demo-frame {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.demo-dots {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+.demo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+  transition: all 0.2s ease;
+}
+.demo-dot.on {
+  background: var(--accent);
+  width: 18px;
+  border-radius: 3px;
+}
+.demo-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s ease;
+}
+.demo-toggle:hover { background: rgba(0, 0, 0, 0.75); }
+.demo-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+.demo-caption {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+/* 属性标签 */
+.detail-attrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.detail-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.detail-section { margin-bottom: 14px; }
+.detail-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.detail-value { font-size: 13px; line-height: 1.6; }
+.detail-actions { margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .detail-modal { max-width: 100%; max-height: 92vh; }
+  .loc-tab { font-size: 12px; padding: 10px 8px; }
+}
+
+
 /* ---------- 频次统计 ---------- */
 .stats-card {
   padding: 16px;
