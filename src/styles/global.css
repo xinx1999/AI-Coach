@@ -779,82 +779,39 @@ a { color: var(--accent); text-decoration: none; }
 }
 .icon-btn:hover { background: var(--border); color: var(--text); }
 
-/* 动画演示区 */
-.demo-stage {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  overflow: hidden;
+/* 三个关键姿势并排对照 */
+.pose-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
   margin-bottom: 10px;
 }
-/* 三帧叠放在同一格子里，靠 opacity 交叉淡入淡出，避免硬切换的跳帧感 */
-.demo-stack {
-  position: absolute;
-  inset: 0;
-}
-.demo-layer {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  opacity: 0;
-  transition: opacity 260ms ease-in-out;
-}
-.demo-layer.visible { opacity: 1; }
-.demo-dots {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+.pose-cell {
+  margin: 0;
   display: flex;
+  flex-direction: column;
   gap: 6px;
 }
-.demo-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.28);
-  transition: all 260ms ease-in-out;
+.pose-cell img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  display: block;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
-.demo-dot.on {
-  background: var(--accent);
-  width: 18px;
-  border-radius: 3px;
-}
-.demo-toggle {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
+.pose-label {
   font-size: 11px;
   font-weight: 600;
-  border-radius: 99px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  backdrop-filter: blur(6px);
-  transition: background 0.15s ease;
-}
-.demo-toggle:hover { background: rgba(0, 0, 0, 0.75); }
-.demo-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: var(--text-muted);
-  background: var(--surface-2);
-}
-.demo-caption {
-  font-size: 11px;
   color: var(--text-muted);
   text-align: center;
+  letter-spacing: 0.02em;
+}
+.pose-caption {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
   margin-bottom: 14px;
 }
 
