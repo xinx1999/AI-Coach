@@ -23,8 +23,14 @@ const SESSION = {
     {
       slug: 'bench-press',
       exercise: {
-        id: 'e', slug: 'bench-press', name: 'Bench Press', exerciseType: 'weight_reps',
-        equipment: 'Barbell', primaryMuscle: 'Chest', secondaryMuscles: [], isStretch: false, frames: [],
+        id: 'e', slug: 'bench-press', name: 'Barbell Bench Press', nameZh: '杠铃卧推',
+        metric: 'reps', equipment: 'barbell', equipmentZh: '杠铃',
+        bodyPart: 'chest', bodyPartZh: '胸部',
+        target: 'pectorals', targetZh: '胸大肌',
+        muscleGroup: 'triceps', muscleGroupZh: '肱三头肌',
+        secondary: [{ en: 'triceps', zh: '肱三头肌' }],
+        stretch: false, home: false,
+        gif: null, thumb: null, steps: [], instructions: '',
       },
       sets: [
         { id: 'a', setNumber: 1, completed: true },
@@ -73,7 +79,7 @@ const SESSION = {
   // ---------- 2. 应用新计划必须弹确认 ----------
   console.log('\n[2] 有进行中训练时应用新计划 → 弹确认，不静默替换');
   await goto('plan');
-  await page.locator('.muscle-chip', { hasText: '胸部' }).first().click();
+  await page.locator('.muscle-chip', { hasText: '胸大肌' }).first().click();
   await page.waitForTimeout(150);
   await page.locator('.wizard-generate').click();
   await page.waitForSelector('.wizard-result');
@@ -147,7 +153,7 @@ const SESSION = {
   console.log('\n[5] 没有进行中训练时 → 直接应用，不弹窗');
   await page.evaluate(() => localStorage.setItem('strong-trainer-draft-workout', '[]'));
   await goto('plan');
-  await page.locator('.muscle-chip', { hasText: '背部' }).first().click();
+  await page.locator('.muscle-chip', { hasText: '背阔肌' }).first().click();
   await page.waitForTimeout(150);
   await page.locator('.wizard-generate').click();
   await page.waitForSelector('.wizard-result');

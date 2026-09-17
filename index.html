@@ -2,11 +2,25 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="按身高体重与场地自动排课的中文健身训练器，内置 1318 个动作演示。" />
+    <meta name="theme-color" content="#131316" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Strong" />
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230E0E10'/%3E%3Cg stroke='%23E8722A' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M7 12v8M11 9.5v13M21 9.5v13M25 12v8M11 16h10'/%3E%3C/g%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23E0601C'/%3E%3Cg stroke='%23FFFFFF' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M7 12v8M11 9.5v13M21 9.5v13M25 12v8M11 16h10'/%3E%3C/g%3E%3C/svg%3E"
     />
+    <!--
+      这里用相对路径（./ 开头）而不是 /icon.svg：
+      Vite 只会重写它自己产出的资源引用，<link rel="icon"> / manifest 这类
+      手写标签不会被加 base 前缀。部署在 GitHub Pages 子路径（/<仓库>/）下时，
+      裸的 /icon.svg 会指向域名根 → 404。
+      用 ./ 后由浏览器按当前文档位置解析，根路径与子路径都能命中。
+    -->
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="manifest" href="./manifest.json" />
     <title>Strong — 训练计划</title>
   </head>
   <body>

@@ -4,12 +4,63 @@ dist/
 .vite/
 *.local
 .DS_Store
+# 本地模拟 GitHub Pages 子路径部署用的临时目录（把 dist 拷成 <仓库名>/ 再起静态服务）
+.pagesim/
 
 # 浏览器自动化测试产物
 .playwright-cli/
+# 截图脚本产出的 PNG（shot-*.png 是 shot-redesign.cjs，其余是 shot-landing /
+# shot-trend / e2e-* 产出的复核图）。这些都是本地跑一次就变的一次性产物，
+# 不入库。用具体前缀而不是 *.png，避免误伤将来真的要提交的图。
 shot-*.png
+trend-*.png
+landing-*.png
+trainer-*.png
 e2e-*.cjs
+# 例外：这些功能测试断言的是产品契约（取值口径、坐标映射、落点优先级），
+# 是长期有效的回归网，不是一次性调试脚本。
+# 注意必须在 e2e-*.cjs 之后用 ! 逐条排除才生效——gitignore 是顺序求值的。
+!e2e-trend.cjs
+!e2e-landing.cjs
+!e2e-pwa.cjs
+# 补漏：e2e-regression 是断言最多的一个套件（45 项），此前一直被这条通配吃掉，
+# 等于最重要的回归网反而没进版本库。
+!e2e-regression.cjs
+!e2e-plan-loc.cjs
+!shot-plan-result.cjs
+# diag-*.cjs 是诊断脚本，输出的「结论」段有长期价值（记录数据事实），
+# 保留入库；e2e-*.cjs 之外的调试脚本仍默认忽略。
+!diag-loc.cjs
 # 帧分析脚本与临时渲染结果（排查动作图问题时用）
 .poses/
 cmp-*.png
 big-*.png
+
+# 动作演示媒体（1324 个 GIF + 1324 个缩略图，约 138 MB）。
+# 不入库的原因：二进制文件一旦提交就会永久留在 git 历史里，
+# 且它们是数据集的可再生产物，没必要让每次 clone 都背上 138 MB。
+# 拉取方式：npm run media:fetch（先 npm run dataset:fetch 拿清单）。
+# 脚本可重复执行、断点续传，只补缺失的文件。
+public/media/
+
+# 上面这些审计/校验脚本是本项目自己的工具，不应被 e2e-*.cjs 规则误伤
+!audit-product.cjs
+!verify-fix.cjs
+!verify-media.cjs
+!shot-redesign.cjs
+# verify-backlog 核验评审报告「待办清单」的实际状态，逐条在运行中的应用上取证。
+# 报告状态与代码一旦再次脱节，这个脚本是唯一能自动发现的网。
+!verify-backlog.cjs
+# diag-history-sort 是排查排序问题时写的，保留可复现当时的诊断过程
+!diag-history-sort.cjs
+# e2e-equipment 断言的是「生成结果里的器械 ⊆ 用户勾选的 ∪ {自重}」，
+# 这是用户报过的原始问题（在家生成了没有的器械），必须长期守着。
+!e2e-equipment.cjs
+# diag-loc-tag 记录场地标签的三态口径（在家 / 健身房 / 自重），
+# 防止自重动作在健身房计划里被重新标成「在家」。
+!diag-loc-tag.cjs
+
+# 数据集原始清单（17MB）。用 npm run dataset:fetch 重新拉取，
+# name_zh.json 只有 80KB，保留入库以便查证中文名映射。
+scripts/exercises.json
+scripts/failed.json

@@ -19,9 +19,22 @@ const BASE = process.env.BASE || 'http://localhost:4199';
   const log = (k, v) => out.push(`${k} :: ${v}`);
 
   // ---------- A. 首次进入落点 ----------
+  // 清空存储后再进首页，测「一个全新用户」会落到哪里。
+  // 注意：落点不再是固定的浏览页，而是按处境决定（见 App.tsx getInitialScreen），
+  // 空手时应落到计划页。这里的断言随产品意图一起更新，不是放宽标准。
   await page.goto(BASE + '/', { waitUntil: 'networkidle' });
-  log('A1 首次进入 hash', await page.evaluate(() => location.hash || '(空)'));
-  log('A1 首次进入页面标题', await page.locator('.section-row h2').first().innerText());
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(BASE + '/', { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(500);
+  log('A1 空手首次进入 hash', await page.evaluate(() => location.hash || '(空)'));
+
+  // 显式进浏览页再测动作总数（深链优先级由 e2e-landing 覆盖）
+  await page.goto(BASE + '/#browse', { waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('.page-title', { timeout: 15000 });
+  log('A1 浏览页标题', await page.locator('.page-title').first().innerText());
+  log('A1 动作总数', await page.locator('.page-count').first().innerText());
 
   // 清空后重新进入编排页
   await page.evaluate(() => localStorage.clear());
@@ -35,15 +48,17 @@ const BASE = process.env.BASE || 'http://localhost:4199';
   log('B1 编排初始动作数', await page.locator('.workout-item').count());
 
   // ---------- C. 走真实交互添加动作，观察每组的输入 UI ----------
+  // 快速添加的第一个动作来自完整目录（按部位排序），本项目不假定它的计量方式，
+  // 只如实记录渲染出的输入形态；计量方式本身的正确性由 e2e-optimize 的 [D] 段覆盖。
   await page.locator('.pill:has-text("+")').first().click();
   await page.waitForTimeout(300);
   log('C0 快速添加后动作数', await page.locator('.workout-item').count());
   const setRow = page.locator('.workout-item .set-row').first();
-  log('C1 距离类动作的输入框数量', await setRow.locator('input').count());
   const labels = await setRow.locator('.set-input-label').allInnerTexts();
+  log('C1 每组输入框数量', await setRow.locator('input').count());
   log('C1 输入单位标签', JSON.stringify(labels));
 
-  // C2: 距离类动作的真实类型（用 catalog 里的 running 反查页面显示）
+  // C2: 首个动作的归属信息，用于确认中文标签已接入
   const firstCardMeta = await page.locator('.workout-item-meta').first().innerText();
   log('C2 第一个动作的元信息', firstCardMeta.replace(/\n/g, ' '));
 
@@ -113,16 +128,24 @@ const BASE = process.env.BASE || 'http://localhost:4199';
   });
   log('J1 浏览页可 Tab 元素数', tabbables);
 
-  // ---------- K. 素材 SVG 的填充色与容器对比度 ----------
-  const svgFill = await page.evaluate(async () => {
-    const r = await fetch('/assets/bench-press/frame-1.svg');
-    const t = await r.text();
-    const m = t.match(/fill="(#[0-9a-fA-F]{3,6})"/g) || [];
-    const counts = {};
-    m.forEach((x) => (counts[x] = (counts[x] || 0) + 1));
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  // ---------- K. 演示媒体的加载表现与主题对比度 ----------
+  // 素材已从「三张自绘 SVG」换成数据集提供的 180×180 循环 GIF，
+  // 因此这里改为审计 GIF 是否真的加载成功、以及浅色主题下的对比度。
+  const demoAudit = await page.evaluate(async () => {
+    const r = await fetch('/media/gif/1275-Q497lAE.gif');
+    const blob = await r.blob();
+    const buf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    // GIF89a 的动画扩展块标志：0x21 0xF9 之后紧跟的 control block
+    const isGif = bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46; // "GIF"
+    // 粗略数一下图形控制块个数，>1 说明是多帧（会动）
+    let frames = 0;
+    for (let i = 0; i < bytes.length - 2; i++) {
+      if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04) frames++;
+    }
+    return { ok: r.ok, status: r.status, isGif, frames, size: blob.size };
   });
-  log('K1 frame-1.svg 的 fill 取值 TOP3', JSON.stringify(svgFill));
+  log('K1 演示 GIF 可达性', JSON.stringify(demoAudit));
   const rootBg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const rootText = await page.evaluate(() => getComputedStyle(document.body).color);
   log('K2 主题背景/文字', `${rootBg} / ${rootText}`);
@@ -150,8 +173,37 @@ const BASE = process.env.BASE || 'http://localhost:4199';
   log('L4 Esc 可关闭', !(await page.locator('.detail-modal').isVisible().catch(() => false)));
 
   // ---------- M. 分享/离线能力 ----------
-  log('M1 是否有 manifest.json', await page.evaluate(async () => (await fetch('/manifest.json').catch(() => ({ ok: false }))).ok));
-  log('M1 是否有 service worker', await page.evaluate(() => 'serviceWorker' in navigator));
+  /**
+   * 这里必须校验 content-type 和内容形状，不能只看 fetch 是否 ok。
+   *
+   * 曾经踩过的坑：dev/preview 服务器对未知路径会回落到 index.html（SPA 兜底），
+   * 于是 fetch('/manifest.json') 拿到 200 + 一整页 HTML，`ok` 为 true，
+   * 就被记成「有 manifest」——一个彻头彻尾的假阳性，把 PWA 能力的缺失盖了过去。
+   * 所以现在要求：content-type 是 JSON，且解析出来带 name/icons 这类 manifest 字段。
+   */
+  const manifest = await page.evaluate(async () => {
+    try {
+      const res = await fetch('/manifest.json');
+      const type = res.headers.get('content-type') || '';
+      const text = await res.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch { /* 不是 JSON 就不是 manifest */ }
+      return {
+        ok: res.ok,
+        type,
+        isJson: type.includes('json') && json !== null,
+        hasName: !!(json && (json.name || json.short_name)),
+        hasIcons: !!(json && Array.isArray(json.icons) && json.icons.length > 0),
+        looksLikeHtml: text.trimStart().startsWith('<!doctype') || text.trimStart().startsWith('<html'),
+      };
+    } catch {
+      return { ok: false, type: '', isJson: false, hasName: false, hasIcons: false, looksLikeHtml: false };
+    }
+  });
+  log('M1 manifest 请求', `ok=${manifest.ok} type=${manifest.type || '(无)'}`);
+  log('M1 是否真的是 manifest', manifest.isJson && manifest.hasName && manifest.hasIcons);
+  if (manifest.looksLikeHtml) log('M1 注意', '拿到的是 HTML —— SPA 兜底造成的假阳性，不等于存在 manifest');
+  log('M1 浏览器是否支持 service worker', await page.evaluate(() => 'serviceWorker' in navigator));
   const swCount = await page.evaluate(() => navigator.serviceWorker?.getRegistrations?.().then((r) => r.length) ?? 0);
   log('M1 已注册 SW 数量', swCount);
 

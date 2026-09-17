@@ -1,0 +1,114 @@
+name: Deploy to GitHub Pages
+
+# 只在 master（或 main）分支推送时发布，也允许手动触发。
+# 手动触发很有用：改完仓库 Settings → Pages 的配置后，不必空提交一次代码。
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+# 发布需要写权限，以及 GITHUB_TOKEN 换取 Pages 的 id-token
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只允许一个发布在跑；不取消进行中的那次 —— 发布到一半被中断
+# 会留下不完整的站点。排队等前一次跑完更安全。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 动作演示素材（约 138MB）不入库，必须在这里现拉。
+      # fetch-dataset 先拉清单（含每个动作的 gif/image 相对路径），
+      # fetch-media 再照清单并发下载到 public/media/。
+      # 两步都支持断点续传，失败重跑即可。
+      - name: Fetch dataset manifest
+        run: npm run dataset:fetch
+
+      - name: Fetch exercise media (138MB)
+        run: npm run media:fetch
+
+      - name: Build
+        # BASE_PATH 必须带首尾斜杠，形如 /<仓库名>/
+        # 不设的话产物会引用 /assets/... ，在 <用户>.github.io/<仓库>/ 下必然 404（白屏）
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - name: Verify build output
+        # 发布前的自检：这些是「页面能打开但实际是坏的」的典型症状，
+        # 必须在部署前挡住，而不是等用户打开发现白屏。
+        run: |
+          node -e "
+          const fs=require('fs');
+          const repo=process.env.GITHUB_REPOSITORY.split('/')[1];
+          const base='/'+repo+'/';
+          const fail=(m)=>{console.error('✗ '+m);process.exit(1)};
+
+          // 1) 入口文件存在
+          if(!fs.existsSync('dist/index.html')) fail('dist/index.html 不存在');
+
+          const html=fs.readFileSync('dist/index.html','utf8');
+
+          // 2) 资源引用必须带 base 前缀，否则子路径下 404
+          const refs=[...html.matchAll(/(?:src|href)=\"([^\"]+)\"/g)].map(m=>m[1])
+            .filter(u=>/\.(js|css)$/.test(u));
+          if(refs.length===0) fail('index.html 里找不到任何 js/css 引用');
+          const bad=refs.filter(u=>!u.startsWith(base));
+          if(bad.length) fail('以下资源没带 base 前缀，子路径部署会 404：\n  '+bad.join('\n  '));
+
+          // 3) 媒体必须真的构建进去了（抽 3 个缩略图验证）
+          const gifs=fs.existsSync('dist/media/gif')?fs.readdirSync('dist/media/gif').length:0;
+          const thumbs=fs.existsSync('dist/media/thumb')?fs.readdirSync('dist/media/thumb').length:0;
+          if(gifs<1000||thumbs<1000) fail('媒体数量异常：gif='+gifs+' thumb='+thumbs+'（预期各 1300+）');
+
+          // 4) PWA 文件就位
+          for(const f of ['dist/sw.js','dist/manifest.json','dist/icon.svg']) {
+            if(!fs.existsSync(f)) fail('缺少 '+f);
+          }
+
+          // 5) SW 里不能残留裸的 /assets/ 或 /media/ 判定
+          const sw=fs.readFileSync('dist/sw.js','utf8');
+          if(/startsWith\('\/assets\/'\)/.test(sw)) fail('sw.js 仍在用裸 /assets/ 前缀，子路径下缓存会失效');
+
+          console.log('✓ base='+base+' 资源引用 '+refs.length+' 条全部带前缀');
+          console.log('✓ 媒体 gif='+gifs+' thumb='+thumbs);
+          console.log('✓ PWA 文件齐全，sw.js 已适配子路径');
+          "
+
+      # 用 Pages 官方的上传动作，产出一个 tar artifact 供 deploy 使用
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

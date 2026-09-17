@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Trash2, ChevronDown, ChevronUp, BarChart3, Download, Upload, X, AlertTriangle, Check } from 'lucide-react';
 import {
   loadData,
@@ -9,7 +9,8 @@ import {
   type PersistedData,
   type ImportResult,
 } from '../lib/store';
-import { exerciseName } from '../lib/zh';
+import { displayName } from '../lib/store';
+import StrengthTrend from './StrengthTrend';
 import type { WorkoutSession } from '../lib/types';
 
 /**
@@ -121,7 +122,9 @@ export default function HistoryView() {
   };
 
   /* ---------- 空状态：仍然要给导出/导入入口 ----------
-     用户想「先备份再练」是完全合理的顺序，所以历史为空时不能把功能藏起来。 */
+     用户想「先备份再练」是完全合理的顺序，所以历史为空时不能把功能藏起来。
+     趋势图同理：这时候显示的是「怎么才能解锁趋势」的说明，
+     正是用户第一次需要知道「要记重量」的时机；藏起来他就永远不知道有这功能。 */
   if (data.sessions.length === 0) {
     return (
       <div style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -143,6 +146,7 @@ export default function HistoryView() {
           <h3>还没有训练记录</h3>
           <p>完成一次训练后，记录会出现在这里。</p>
         </div>
+        <StrengthTrend />
         <BackupPanel
           data={data}
           exported={exported}
@@ -193,6 +197,10 @@ export default function HistoryView() {
         </div>
       </div>
 
+      {/* 频次证明「练了」，趋势证明「变强了」——后者才是留下来的理由，
+          所以紧挨着频次图，而不是塞进折叠区 */}
+      <StrengthTrend />
+
       <BackupPanel
         data={data}
         exported={exported}
@@ -242,7 +250,7 @@ export default function HistoryView() {
                 <div className="history-detail">
                   {s.exercises.map((w, wi) => (
                     <div key={`${w.slug}-${wi}`} className="history-ex-row">
-                      <span className="history-ex-name">{exerciseName(w.slug, w.exercise.name)}</span>
+                      <span className="history-ex-name">{displayName(w.exercise)}</span>
                       <span className="history-ex-sets">
                         {w.sets.map(describeSet).join('  |  ')}
                       </span>

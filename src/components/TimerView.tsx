@@ -13,9 +13,18 @@ import {
   Trash2,
   BookOpen,
 } from 'lucide-react';
-import { getAssetPath, getLastPerformance, formatLastPerformance, REST_DURATION_KEY } from '../lib/store';
+import {
+  thumbPath,
+  gifPath,
+  displayName,
+  getLastPerformance,
+  getExercise,
+  formatLastPerformance,
+  needsWeightField,
+  REST_DURATION_KEY,
+} from '../lib/store';
 import { usePersistentState } from '../lib/persist';
-import { exerciseName, equipmentName, muscleName } from '../lib/zh';
+
 import type { TimerTab, WorkoutExercise, WorkoutSession } from '../lib/types';
 import GuidePanel from './GuidePanel';
 
@@ -257,7 +266,12 @@ function GuidedTimer({
    * 这里写入 actualReps / actualWeight，未填则回落到计划值展示。
    */
   const setActual = useCallback(
-    (exIndex: number, setIndex: number, field: 'actualReps' | 'actualWeight', value: number | undefined) => {
+    (
+      exIndex: number,
+      setIndex: number,
+      field: 'actualReps' | 'actualWeight' | 'actualDurationSec' | 'actualDistanceM',
+      value: number | undefined,
+    ) => {
       if (!session) return;
       const exercises = session.exercises.map((w, i) =>
         i !== exIndex
@@ -335,7 +349,7 @@ function GuidedTimer({
           {awaitingConfirm
             ? '全部完成'
             : currentWorkoutEx
-              ? exerciseName(currentWorkoutEx.slug, currentWorkoutEx.exercise.name)
+              ? displayName(currentWorkoutEx.exercise)
               : '训练结束'}
         </h2>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -386,12 +400,11 @@ function GuidedTimer({
 
       {!awaitingConfirm && currentWorkoutEx && (
         <div className="guided-card">
-          <FrameStrip slug={currentWorkoutEx.slug} />
+          <ExerciseDemo slug={currentWorkoutEx.slug} />
           <div className="guided-meta">
-            {muscleName(currentWorkoutEx.exercise.primaryMuscle)} ·{' '}
-            {equipmentName(currentWorkoutEx.exercise.equipment)}
-            {currentWorkoutEx.exercise.secondaryMuscles.length > 0 && (
-              <> · 协同 {currentWorkoutEx.exercise.secondaryMuscles.map(muscleName).join('、')}</>
+            {currentWorkoutEx.exercise.targetZh} · {currentWorkoutEx.exercise.equipmentZh}
+            {currentWorkoutEx.exercise.secondary.length > 0 && (
+              <> · 协同 {currentWorkoutEx.exercise.secondary.map((m) => m.zh).join('、')}</>
             )}
           </div>
 
@@ -426,47 +439,122 @@ function GuidedTimer({
             实际完成值：与计划值分开记录。
             计划是「打算做多少」，这里是「真的做了多少」——不记就断了渐进超负荷的依据。
             留空表示与计划一致，不用强迫用户每组都填。
+            按动作的计量方式给输入框：计时类给秒、距离类给米+秒、次数类给次（+ 负重动作才给 kg）。
           */}
-          {phase === 'work' && current && currentSet && !currentSet.durationSec && (
+          {phase === 'work' && current && currentSet && (
             <div className="guided-actual">
               <span className="guided-actual-label">实际完成</span>
-              <input
-                className="set-input"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                max="999"
-                placeholder={currentSet.reps ? String(currentSet.reps) : '-'}
-                value={currentSet.actualReps ?? ''}
-                onChange={(e) =>
-                  setActual(
-                    current.exIndex,
-                    current.setIndex,
-                    'actualReps',
-                    e.target.value ? parseInt(e.target.value, 10) : undefined,
-                  )
-                }
-              />
-              <span className="set-input-label">次</span>
-              <input
-                className="set-input"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                max="999"
-                step="0.5"
-                placeholder={currentSet.weight ? String(currentSet.weight) : '-'}
-                value={currentSet.actualWeight ?? ''}
-                onChange={(e) =>
-                  setActual(
-                    current.exIndex,
-                    current.setIndex,
-                    'actualWeight',
-                    e.target.value ? parseFloat(e.target.value) : undefined,
-                  )
-                }
-              />
-              <span className="set-input-label">kg</span>
+
+              {currentWorkoutEx.exercise.metric === 'reps' && (
+                <>
+                  <input
+                    className="set-input"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max="999"
+                    placeholder={currentSet.reps ? String(currentSet.reps) : '-'}
+                    value={currentSet.actualReps ?? ''}
+                    onChange={(e) =>
+                      setActual(
+                        current.exIndex,
+                        current.setIndex,
+                        'actualReps',
+                        e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      )
+                    }
+                  />
+                  <span className="set-input-label">次</span>
+                  {/* 自重动作不给 kg 框，除非用户自己加重 —— 这里保守一点，只给负重动作 */}
+                  {needsWeightField(currentWorkoutEx.exercise) && (
+                    <>
+                      <input
+                        className="set-input"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        max="999"
+                        step="0.5"
+                        placeholder={currentSet.weight ? String(currentSet.weight) : '-'}
+                        value={currentSet.actualWeight ?? ''}
+                        onChange={(e) =>
+                          setActual(
+                            current.exIndex,
+                            current.setIndex,
+                            'actualWeight',
+                            e.target.value ? parseFloat(e.target.value) : undefined,
+                          )
+                        }
+                      />
+                      <span className="set-input-label">kg</span>
+                    </>
+                  )}
+                </>
+              )}
+
+              {currentWorkoutEx.exercise.metric === 'duration' && (
+                <>
+                  <input
+                    className="set-input"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max="9999"
+                    placeholder={currentSet.durationSec ? String(currentSet.durationSec) : '-'}
+                    value={currentSet.actualDurationSec ?? ''}
+                    onChange={(e) =>
+                      setActual(
+                        current.exIndex,
+                        current.setIndex,
+                        'actualDurationSec',
+                        e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      )
+                    }
+                  />
+                  <span className="set-input-label">秒</span>
+                </>
+              )}
+
+              {currentWorkoutEx.exercise.metric === 'distance' && (
+                <>
+                  <input
+                    className="set-input"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max="100000"
+                    placeholder={currentSet.distanceM ? String(currentSet.distanceM) : '-'}
+                    value={currentSet.actualDistanceM ?? ''}
+                    onChange={(e) =>
+                      setActual(
+                        current.exIndex,
+                        current.setIndex,
+                        'actualDistanceM',
+                        e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      )
+                    }
+                  />
+                  <span className="set-input-label">米</span>
+                  <input
+                    className="set-input"
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max="9999"
+                    placeholder={currentSet.durationSec ? String(currentSet.durationSec) : '-'}
+                    value={currentSet.actualDurationSec ?? ''}
+                    onChange={(e) =>
+                      setActual(
+                        current.exIndex,
+                        current.setIndex,
+                        'actualDurationSec',
+                        e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      )
+                    }
+                  />
+                  <span className="set-input-label">秒</span>
+                </>
+              )}
             </div>
           )}
 
@@ -545,14 +633,14 @@ function GuidedTimer({
           return (
             <div key={`${w.slug}-${exIndex}`} className={`guided-row ${isActive ? 'active' : ''}`}>
               <img
-                src={getAssetPath(w.slug, 1)}
+                src={thumbPath(w.exercise) ?? undefined}
                 alt={w.exercise.name}
                 width="40"
                 height="40"
                 loading="lazy"
               />
               <div className="guided-row-main">
-                <div className="guided-row-name">{exerciseName(w.slug, w.exercise.name)}</div>
+                <div className="guided-row-name">{displayName(w.exercise)}</div>
                 <div className="guided-row-sets">
                   {w.sets.map((s, setIndex) => (
                     <button
@@ -587,15 +675,34 @@ function GuidedTimer({
   );
 }
 
-/** 三帧图并排展示，直观呈现动作过程 */
-function FrameStrip({ slug }: { slug: string }) {
-  return (
-    <div className="frame-strip">
-      {([1, 2, 3] as const).map((f) => (
-        <img key={f} src={getAssetPath(slug, f)} alt="" loading="lazy" />
-      ))}
-    </div>
-  );
+/**
+ * 动作演示。
+ *
+ * 训练中抬手就能对照的「怎么动」参考，所以给 GIF 而不是静帧 ——
+ * 这正是之前三张静态图最大的问题：动作本身是要看过程的，
+ * 三张不连续的插画看不出先后顺序。
+ */
+function ExerciseDemo({ slug }: { slug: string }) {
+  const ex = getExercise(slug);
+  const [failed, setFailed] = useState(false);
+  const gif = ex ? gifPath(ex) : null;
+  const thumb = ex ? thumbPath(ex) : null;
+
+  if (gif && !failed) {
+    return (
+      <div className="guided-demo">
+        <img src={gif} alt="" onError={() => setFailed(true)} />
+      </div>
+    );
+  }
+  if (thumb) {
+    return (
+      <div className="guided-demo">
+        <img src={thumb} alt="" className="guided-demo-static" />
+      </div>
+    );
+  }
+  return null;
 }
 
 // ============ 自由间歇 ============

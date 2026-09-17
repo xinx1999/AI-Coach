@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   Trash2,
   Plus,
@@ -13,17 +13,18 @@ import {
 } from 'lucide-react';
 import {
   allExercises,
-  getAssetPath,
+  thumbPath,
+  displayName,
   updateSet,
   addSet,
   removeSet,
   countSets,
   metricSpecFor,
+  needsWeightField,
   estimateWorkoutSeconds,
   getLastPerformance,
   formatLastPerformance,
 } from '../lib/store';
-import { exerciseName, equipmentName, muscleName } from '../lib/zh';
 import type { WorkoutExercise, WorkoutSession } from '../lib/types';
 
 interface Props {
@@ -189,18 +190,18 @@ export default function BuildView({
         <div className="workout-list">
           {workout.map((w, index) => {
             /**
-             * 按动作类型决定要填什么。
-             * 之前对所有类型都渲染「次 + kg」，编排跑步时会看到要填 kg——
-             * 上游的 exerciseType 就是为这件事准备的，不该只用它做筛选。
+             * 按动作的计量方式决定要填什么。
+             * 之前对所有动作都渲染「次 + kg」，编排跑步时会看到要填 kg——
+             * 数据的 metric 字段就是为这件事准备的，不该只用它做筛选。
              */
-            const spec = metricSpecFor(w.exercise.exerciseType);
+            const spec = metricSpecFor(w.exercise.metric);
             const lastPerf = getLastPerformance(w.slug);
             return (
               <div key={`${w.slug}-${index}`} className="workout-item">
-                <img src={getAssetPath(w.slug, 1)} alt={w.exercise.name} width="56" height="56" />
+                <img src={thumbPath(w.exercise) ?? undefined} alt="" width="56" height="56" />
                 <div className="workout-item-info">
                   <div className="workout-item-name">
-                    {exerciseName(w.slug, w.exercise.name)}
+                    {displayName(w.exercise)}
                     <button
                       className={`fav-btn ${favorites.includes(w.slug) ? 'on' : ''}`}
                       onClick={() => onToggleFavorite(w.slug)}
@@ -211,8 +212,7 @@ export default function BuildView({
                     </button>
                   </div>
                   <div className="workout-item-meta">
-                    {muscleName(w.exercise.primaryMuscle)} · {equipmentName(w.exercise.equipment)} ·{' '}
-                    {w.sets.length} 组
+                    {w.exercise.targetZh} · {w.exercise.equipmentZh} · {w.sets.length} 组
                   </div>
 
                   {/* 上次练这个动作的成绩——编排时最该参考的一条信息 */}
@@ -305,7 +305,8 @@ export default function BuildView({
                           </>
                         )}
 
-                        {spec.weight && (
+                        {/* 自重动作不给 kg 框：俯卧撑、引体向上填「重量」是误导 */}
+                        {spec.weight && needsWeightField(w.exercise) && (
                           <>
                             <input
                               className="set-input"
@@ -316,11 +317,7 @@ export default function BuildView({
                               step="0.5"
                               value={s.weight ?? ''}
                               placeholder="-"
-                              title={
-                                w.exercise.exerciseType === 'assisted_bodyweight'
-                                  ? '辅助重量（kg）'
-                                  : '重量（kg）'
-                              }
+                              title="重量（kg）"
                               onChange={(e) =>
                                 updateSetField(
                                   index,
@@ -427,7 +424,7 @@ export default function BuildView({
         <div className="filter-row">
           {quickPool.slice(0, quickCount).map((e) => (
             <button key={e.slug} className="pill" onClick={() => addExercise(e.slug)}>
-              + {exerciseName(e.slug, e.name)}
+              + {displayName(e)}
             </button>
           ))}
           {quickPool.length === 0 && (

@@ -1,69 +1,49 @@
-import { getGuide } from '../lib/guide';
-import { GUIDE_VERSION } from '../lib/guide/types';
+import { getExercise, displayName } from '../lib/store';
+import type { Exercise } from '../lib/types';
 
 interface Props {
   slug: string;
-  /** compact 用于计时页速查，省略部分留白 */
+  /** 紧凑模式：只列步骤，用于计时页的速查 */
   compact?: boolean;
 }
 
 /**
- * 动作教程面板：动作要领 / 呼吸 / 常见错误 / 安全提示。
+ * 动作要领。
  *
- * 内容来源：项目自行编写（上游素材库只有插图，没有文字教学）。
- * 因此面板底部固定标注「待专业校对」，避免用户把这当权威教材。
+ * 文案直接来自数据集自带的 `instruction_steps.zh`（人工撰写的中文分步说明），
+ * 不再由本项目自撰 —— 之前那版 302 条自写教程既不可信、也没必要，
+ * 数据集本来就有更完整的中文内容。
  */
 export default function GuidePanel({ slug, compact = false }: Props) {
-  const guide = getGuide(slug);
+  const ex = getExercise(slug);
+  if (!ex) return null;
 
-  // 没有教程时明确说明，而不是渲染一个空壳让用户以为丢内容了
-  if (!guide) {
-    return (
-      <div className="guide-panel">
-        <p className="guide-empty">这个动作还没有教程内容。</p>
-      </div>
-    );
-  }
+  const steps = ex.steps ?? [];
+  if (steps.length === 0 && !ex.instructions) return null;
 
   return (
-    <div className="guide-panel">
-      <section className="guide-block">
-        <p className="guide-label">动作要领</p>
+    <section className={`guide ${compact ? 'guide-compact' : ''}`}>
+      <div className="guide-head">
+        <h3 className="guide-title">动作要领</h3>
+        {/* 非紧凑模式下动作名已在弹窗标题里出现过，这里不再重复；
+            紧凑模式（计时页速查）没有标题，才需要带上名字 */}
+        {compact && <span className="guide-src">{displayName(ex)}</span>}
+      </div>
+
+      {steps.length > 0 ? (
         <ol className="guide-steps">
-          {guide.steps.map((s, i) => (
+          {steps.map((s, i) => (
             <li key={i}>{s}</li>
           ))}
         </ol>
-      </section>
-
-      <section className="guide-block">
-        <p className="guide-label">呼吸</p>
-        <p className="guide-text">{guide.breathing}</p>
-      </section>
-
-      {!compact && (
-        <>
-          <section className="guide-block">
-            <p className="guide-label">常见错误</p>
-            <ul className="guide-list guide-list-warn">
-              {guide.mistakes.map((m, i) => (
-                <li key={i}>{m}</li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="guide-block">
-            <p className="guide-label">安全提示</p>
-            <ul className="guide-list">
-              {guide.safety.map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ul>
-          </section>
-        </>
+      ) : (
+        <p className="guide-text">{ex.instructions}</p>
       )}
-
-      <p className="guide-note">教程内容为项目自撰，待专业校对 · v{GUIDE_VERSION}</p>
-    </div>
+    </section>
   );
+}
+
+/** 供其他组件直接取步骤，避免各自重复实现 */
+export function stepsOf(ex: Exercise): string[] {
+  return ex.steps ?? [];
 }

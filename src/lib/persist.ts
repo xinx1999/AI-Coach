@@ -16,12 +16,30 @@ export function uid(): string {
  * 一个用户从没碰过的键就会被凭空创建成字符串 "null"，
  * 让「键不存在」和「值为 null」这两种本不同的状态混在一起。
  * 因此 null / undefined 一律视为「没有值」，直接 remove 掉而不是写进去。
+ *
+ * 另一个坑（本次修复）：读到 null 时要回落 initial，而不是把 null 交给调用方。
+ * 历史版本留下的 "null" 字符串、或被手改过的存储，都会让 JSON.parse 得到 null。
+ * 直接返回它会让 `workout.map(...)` 这类调用当场抛错、整页白屏——
+ * 一份坏数据不该让应用打不开。null / undefined 一律视为「没有值」。
+ *
+ * @param validate 可选的形状校验。传入后，只有通过校验的值才会被采用，
+ *   否则回落 initial。用于「必须是数组」这类约束：存储里可能是对象或字符串，
+ *   光判断非 null 挡不住，交给调用方各自声明期望的形状最稳妥。
  */
-export function usePersistentState<T>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+export function usePersistentState<T>(
+  key: string,
+  initial: T,
+  validate?: (v: unknown) => boolean,
+): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
     try {
       const raw = localStorage.getItem(key);
-      return raw === null ? initial : (JSON.parse(raw) as T);
+      if (raw === null) return initial;
+      const parsed = JSON.parse(raw) as T;
+      // parsed 可能是 null（存的是 "null"），此时必须回落 initial
+      if (parsed === null || parsed === undefined) return initial;
+      if (validate && !validate(parsed)) return initial;
+      return parsed;
     } catch {
       return initial;
     }

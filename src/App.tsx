@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import TimerView from './components/TimerView';
 import BrowseView from './components/BrowseView';
 import BuildView from './components/BuildView';
@@ -22,9 +22,46 @@ import { Timer, Search, Plus, History, Sparkles, Dumbbell, Check } from 'lucide-
 
 const SCREENS: Screen[] = ['timer', 'browse', 'plan', 'build', 'history'];
 
+/**
+ * 首次进入落在哪一页。
+ *
+ * 之前无条件兜底到 browse（「浏览 302 个动作」），那是**工具视角**：
+ * 用户打开 App 想知道的是「今天练什么、上次练到哪」，而不是先逛动作库。
+ *
+ * 所以按用户此刻的处境来定：
+ *   1. 地址栏有明确 hash（深链、刷新、分享链接）→ 尊重它，绝不覆盖。
+ *   2. 有进行中的训练 → 直接回计时页续上。练到一半被打断时，
+ *      再让他自己找回去是最容易流失的一步。
+ *   3. 编排里已有动作 → 落到编排页，那里就是「今天要练的」。
+ *   4. 什么都没有 → 落到计划页，让「生成一份计划」成为第一步；
+ *      空着手进浏览页面对 1318 个动作只会不知道怎么下手。
+ */
 function getInitialScreen(): Screen {
   const hash = window.location.hash.replace('#', '') as Screen;
-  return SCREENS.includes(hash) ? hash : 'browse';
+  if (SCREENS.includes(hash)) return hash;
+
+  try {
+    // 直接读存储而不是等 state 初始化：这一步发生在首次渲染前，
+    // 拿不到已经反序列化好的 workout / session。
+    if (localStorage.getItem(ACTIVE_SESSION_KEY)) return 'timer';
+    const draft = localStorage.getItem(DRAFT_WORKOUT_KEY);
+    if (draft) {
+      const parsed = JSON.parse(draft);
+      /**
+       * 必须同时校验「是数组」且「非空」。
+       *
+       * 这里有两个真实踩过的坑：
+       *   - 历史版本会把 null 写成字符串 "null"，JSON.parse 得到 null，
+       *     只判断 `if (draft)` 会放行，随后 workout.map() 直接把应用打崩。
+       *   - 空数组是「编排过但清空了」，不代表今天有安排，不该落到编排页。
+       */
+      if (Array.isArray(parsed) && parsed.length > 0) return 'build';
+    }
+  } catch {
+    // 存储不可用（隐私模式）或数据损坏时不要卡住，继续走下面的兜底
+  }
+
+  return 'plan';
 }
 
 function resetSets(workout: WorkoutExercise[]): WorkoutExercise[] {
@@ -38,13 +75,20 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(getInitialScreen);
 
   // 今日编排：草稿持久化，刷新或浏览器被系统回收后仍能续上
-  const [workout, setWorkout] = usePersistentState<WorkoutExercise[]>(DRAFT_WORKOUT_KEY, []);
+  // 必须校验是数组：存储被手改或版本迁移出问题时，一个对象会让 workout.map 当场崩掉
+  const [workout, setWorkout] = usePersistentState<WorkoutExercise[]>(
+    DRAFT_WORKOUT_KEY,
+    [],
+    Array.isArray,
+  );
   // 进行中的训练：同样持久化，避免练到一半丢掉整次记录
+  // 校验必须带 exercises 数组，否则计时页读 session.exercises.reduce 会崩
   const [session, setSession] = usePersistentState<WorkoutSession | null>(
     ACTIVE_SESSION_KEY,
     null,
+    (v) => typeof v === 'object' && v !== null && Array.isArray((v as WorkoutSession).exercises),
   );
-  const [notes, setNotes] = usePersistentState<string>(DRAFT_NOTES_KEY, '');
+  const [notes, setNotes] = usePersistentState<string>(DRAFT_NOTES_KEY, '', (v) => typeof v === 'string');
   /** 收藏的动作。存在与历史同一份数据里，所以从 loadFavorites 读初值 */
   const [favorites, setFavorites] = useState<string[]>(loadFavorites);
   const [finished, setFinished] = useState<WorkoutSession | null>(null);
@@ -244,8 +288,12 @@ export default function App() {
 
         <footer className="app-footer">
           {ATTRIBUTION_LINE}{' '}
-          <a href={ASSET_ATTRIBUTION.licenseUrl} target="_blank" rel="noreferrer noopener">
-            {ASSET_ATTRIBUTION.license}
+          <a href={ASSET_ATTRIBUTION.mediaUrl} target="_blank" rel="noreferrer noopener">
+            {ASSET_ATTRIBUTION.mediaOwner}
+          </a>
+          {' · '}
+          <a href={ASSET_ATTRIBUTION.datasetUrl} target="_blank" rel="noreferrer noopener">
+            {ASSET_ATTRIBUTION.datasetLicense} 许可数据集
           </a>
         </footer>
       </main>

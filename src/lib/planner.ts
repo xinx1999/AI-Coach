@@ -1,10 +1,13 @@
 import {
+  BODYWEIGHT_EQUIPMENT,
+  canDoAtLocation,
   classifiedExercises,
   createWorkoutExercise,
+  muscleStats,
+  normalizeEquipment,
   type ClassifiedExercise,
   type Location,
 } from './store';
-import { muscleName } from './zh';
 import type { WorkoutExercise } from './types';
 
 export type Level = 'beginner' | 'intermediate';
@@ -12,10 +15,17 @@ export type Level = 'beginner' | 'intermediate';
 export interface PlanInput {
   heightCm: number;
   weightKg: number;
-  /** 想练的部位（英文肌群名） */
+  /** 想练的部位（目标肌肉的英文 key，如 'pectorals'） */
   muscles: string[];
   location: Location;
   level: Level;
+  /**
+   * 用户拥有的器械（equipment 英文 key）。
+   *
+   * 为空数组时视为「不限」——保持旧行为，避免调用方漏传时生成不出任何动作。
+   * 自重始终参与，无论这里有没有写；它在 store 层就被定义为兜底。
+   */
+  equipment?: string[];
 }
 
 export interface BmiInfo {
@@ -80,11 +90,21 @@ function setScheme(level: Level, bmi: BmiInfo) {
 }
 
 /**
- * 时长类动作（平板支撑、跑步等）按秒计，不按次数。
+ * 拉伸/放松动作不该进力量计划。
+ *
+ * 上游 1318 个动作里有 58 个是拉伸，混进来会让「胸部计划」出现一堆静态拉伸，
+ * 既不符合用户预期，组数×次数的模型也不适用。要拉伸请用户自己去动作库挑。
+ */
+function isStretchOnly(ex: ClassifiedExercise): boolean {
+  return ex.stretch;
+}
+
+/**
+ * 时长类动作（平板支撑）按秒计。
  * 这里把秒数写进 durationSec、不写 reps，避免用户看到「12 次平板支撑」这种错误提示。
  */
 function isDurationExercise(ex: ClassifiedExercise): boolean {
-  return ex.exerciseType === 'duration' || ex.exerciseType === 'distance_duration';
+  return ex.metric === 'duration' || ex.metric === 'distance';
 }
 
 /**
@@ -149,32 +169,90 @@ export function generatePlan(input: PlanInput): GeneratedPlan {
   const durationSec = durationFor(input.level, bmi);
   const warnings: string[] = [];
 
-  const muscles = input.muscles.length > 0 ? input.muscles : ['Chest'];
+  const muscles = input.muscles.length > 0 ? input.muscles : ['pectorals'];
   const slots = slotsPerMuscle(muscles.length, bmi);
 
   const chosen: ClassifiedExercise[] = [];
   const used = new Set<string>();
   const locTextFull = input.location === 'home' ? '在家' : '在健身房';
 
+  /**
+   * 允许的器械集合。
+   *
+   * 自重**永远**加进来，这是 store 层的定义：它不是一件器械，
+   * 而是「什么器械都没有时也能做」的兜底。所以用户勾的是「我额外拥有什么」。
+   * 未传 equipment 时返回 null = 不按器械过滤，保持旧行为。
+   */
+  const allowed = input.equipment
+    ? [...input.equipment, BODYWEIGHT_EQUIPMENT].map(normalizeEquipment)
+    : null;
+
+  /** 目标肌肉 key → 中文名，用于提示文案，避免界面中英混排 */
+  const zhOf = (key: string) => muscleStats.find((m) => m.key === key)?.label ?? key;
+
+  /** 器械 key → 中文名，提示里要说清楚是哪个器械缺动作 */
+  const equipZh = (key: string) => {
+    const e = classifiedExercises.find((x) => normalizeEquipment(x.equipment) === key);
+    return e?.equipmentZh || key;
+  };
+
+  /** 用户勾了但可能用不上的器械名，用于兜底提示时列出「你选了什么」 */
+  const chosenEquipLabels = input.equipment
+    ? [...new Set(input.equipment.map(normalizeEquipment))]
+        .filter((k) => k !== BODYWEIGHT_EQUIPMENT)
+        .map(equipZh)
+    : [];
+
   for (const muscle of muscles) {
-    // 提示文案里用中文肌群名，避免界面中英混排
-    const zhMuscle = muscleName(muscle);
-    // 该部位 + 该场地的候选；若该场地没有，退回全部场地并给出提示
-    let pool = classifiedExercises.filter(
-      (e) => e.primaryMuscle === muscle && e.location === input.location && !used.has(e.slug),
-    );
+    const zhMuscle = zhOf(muscle);
+    // 力量计划不掺拉伸动作
+    const usable = classifiedExercises.filter((e) => !isStretchOnly(e));
+    const sameMuscle = usable.filter((e) => e.target === muscle && !used.has(e.slug));
+
+    /**
+     * 该部位 + 该场地 + 该器械的候选。
+     * 场地判定走 canDoAtLocation：自重视为两种场地都能做，
+     * 否则去健身房时就再也排不进任何自重动作。
+     */
+    const strict = (list: ClassifiedExercise[]) =>
+      list.filter(
+        (e) =>
+          canDoAtLocation(e, input.location) &&
+          (allowed === null || allowed.includes(normalizeEquipment(e.equipment))),
+      );
+
+    let pool = strict(sameMuscle);
 
     if (pool.length === 0) {
-      const fallback = classifiedExercises.filter(
-        (e) => e.primaryMuscle === muscle && !used.has(e.slug),
+      /**
+       * 三级回退。顺序很重要：先放宽器械，再放宽场地。
+       *
+       * 之所以是「先器械后场地」：用户勾选器械的意图是**装备限制**（我没有哑铃），
+       * 而选场地的意图偏**场景偏好**（我今天在家练）。
+       * 既然在家也可以只做自重，那「保住场地、放宽器械」比反过来的方案更贴用户本意。
+       */
+      const sameLocation = sameMuscle.filter((e) => canDoAtLocation(e, input.location));
+      const fallback = strict(
+        usable.filter((e) => e.target === muscle && !canDoAtLocation(e, input.location)),
       );
-      if (fallback.length === 0) {
-        warnings.push(`${zhMuscle} 暂无动作，已跳过`);
+
+      if (sameLocation.length > 0) {
+        // 同场地有动作，只是器械不合 → 放宽到「自重 + 同场地全部器械」
+        const names = chosenEquipLabels.join('、');
+        warnings.push(
+          names
+            ? `${zhMuscle}在你选的器械（${names}）下没有动作，已改用该场地其他器械的动作`
+            : `${zhMuscle}在所选器械下没有动作，已改用该场地其他器械的动作`,
+        );
+        pool = sameLocation;
+      } else if (fallback.length > 0) {
+        // 该场地完全没这个部位 → 跨场地兜底
+        warnings.push(`${zhMuscle}${locTextFull}没有可用的动作，已改用其他场地动作代替`);
+        pool = fallback;
+      } else {
+        warnings.push(`${zhMuscle}暂无动作，已跳过`);
         continue;
       }
-      // 该场地完全没有这个部位的动作（例如内收肌在家为 0），必须说明为什么要替换
-      warnings.push(`${zhMuscle}${locTextFull}没有可用的动作，已改用其他场地动作代替`);
-      pool = fallback;
     }
 
     const picked = pick(pool, slots);
