@@ -1,5 +1,5 @@
 ﻿import { useState, useMemo, useCallback } from 'react';
-import { Search, X, Home, Dumbbell, LayoutGrid } from 'lucide-react';
+import { Search, X, Home, Dumbbell, LayoutGrid, Star } from 'lucide-react';
 import { classifiedExercises, getAssetPath, countByLocation, type ClassifiedExercise, type Location } from '../lib/store';
 import { exerciseName, equipmentName, muscleName } from '../lib/zh';
 import ExerciseDetail from './ExerciseDetail';
@@ -7,6 +7,8 @@ import ExerciseDetail from './ExerciseDetail';
 interface Props {
   onSelect: (ex: ClassifiedExercise) => void;
   selectedSlugs: string[];
+  favorites: string[];
+  onToggleFavorite: (slug: string) => void;
 }
 
 type LocationTab = 'all' | Location;
@@ -39,23 +41,25 @@ const SEARCH_INDEX = new Map(
   ]),
 );
 
-export default function BrowseView({ onSelect, selectedSlugs }: Props) {
+export default function BrowseView({ onSelect, selectedSlugs, favorites, onToggleFavorite }: Props) {
   const [query, setQuery] = useState('');
   const [muscle, setMuscle] = useState('');
   const [equipment, setEquipment] = useState('');
   const [locTab, setLocTab] = useState<LocationTab>('all');
+  const [favOnly, setFavOnly] = useState(false);
   const [detail, setDetail] = useState<ClassifiedExercise | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return classifiedExercises.filter((e) => {
       if (locTab !== 'all' && e.location !== locTab) return false;
+      if (favOnly && !favorites.includes(e.slug)) return false;
       if (muscle && e.primaryMuscle !== muscle) return false;
       if (equipment && e.equipment !== equipment) return false;
       if (q && !SEARCH_INDEX.get(e.slug)?.includes(q)) return false;
       return true;
     });
-  }, [query, muscle, equipment, locTab]);
+  }, [query, muscle, equipment, locTab, favOnly, favorites]);
 
   const handleAdd = useCallback(
     (e: ClassifiedExercise) => {
@@ -65,7 +69,7 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
     [onSelect, selectedSlugs],
   );
 
-  const hasFilter = Boolean(query || muscle || equipment || locTab !== 'all');
+  const hasFilter = Boolean(query || muscle || equipment || locTab !== 'all' || favOnly);
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -90,6 +94,18 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
             </button>
           );
         })}
+        {/* 收藏与场地并列，因为它是用户自己划出的「常用集合」，不只是筛选条件 */}
+        {favorites.length > 0 && (
+          <button
+            className={`loc-tab ${favOnly ? 'active' : ''}`}
+            onClick={() => setFavOnly((v) => !v)}
+            aria-pressed={favOnly}
+          >
+            <Star size={15} />
+            <span>收藏</span>
+            <span className="loc-tab-count">{favorites.length}</span>
+          </button>
+        )}
       </div>
 
       <div className="search-wrap">
@@ -184,6 +200,19 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
                 }}
               >
                 <img src={getAssetPath(e.slug, 1)} alt={e.name} loading="lazy" />
+                {/* 星标：独立于卡片点击，避免「想收藏却打开了详情」 */}
+                <button
+                  className={`card-fav ${favorites.includes(e.slug) ? 'on' : ''}`}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    onToggleFavorite(e.slug);
+                  }}
+                  title={favorites.includes(e.slug) ? '取消收藏' : '收藏'}
+                  aria-pressed={favorites.includes(e.slug)}
+                  aria-label={favorites.includes(e.slug) ? '取消收藏' : '收藏'}
+                >
+                  <Star size={13} fill={favorites.includes(e.slug) ? 'currentColor' : 'none'} />
+                </button>
                 <div className="exercise-card-info">
                   <div className="exercise-card-name">{exerciseName(e.slug, e.name)}</div>
                   <div className="exercise-card-meta">
@@ -221,6 +250,8 @@ export default function BrowseView({ onSelect, selectedSlugs }: Props) {
           alreadyAdded={selectedSlugs.includes(detail.slug)}
           onAdd={handleAdd}
           onClose={() => setDetail(null)}
+          isFavorite={favorites.includes(detail.slug)}
+          onToggleFavorite={onToggleFavorite}
         />
       )}
     </div>

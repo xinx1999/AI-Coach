@@ -13,7 +13,8 @@ import {
   Trash2,
   BookOpen,
 } from 'lucide-react';
-import { getAssetPath } from '../lib/store';
+import { getAssetPath, getLastPerformance, formatLastPerformance, REST_DURATION_KEY } from '../lib/store';
+import { usePersistentState } from '../lib/persist';
 import { exerciseName, equipmentName, muscleName } from '../lib/zh';
 import type { TimerTab, WorkoutExercise, WorkoutSession } from '../lib/types';
 import GuidePanel from './GuidePanel';
@@ -109,11 +110,20 @@ function GuidedTimer({
   onGoBuild,
   onDiscardSession,
 }: Props) {
-  const [restDuration, setRestDuration] = useState(90);
+  const [restDuration, setRestDuration] = usePersistentState<number>(REST_DURATION_KEY, 90);
   const [phase, setPhase] = useState<'work' | 'rest'>('work');
   const [restRemaining, setRestRemaining] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  /**
+   * 休息截止时间戳（毫秒）。
+   *
+   * 不用「每秒把 remaining 减 1」的写法——浏览器会对后台标签页的定时器节流，
+   * 锁屏时更是几乎停摆，用户锁屏做完一组回来会发现倒计时还停在原处。
+   * 改为记住「该在什么时刻结束」，每次 tick 只做重绘，
+   * 剩余时间由目标时刻反推，被冻结多久都能在恢复瞬间显示正确值。
+   */
+  const restEndsAtRef = useRef<number | null>(null);
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const steps = useMemo(() => (session ? flattenSteps(session.exercises) : []), [session]);
@@ -136,25 +146,61 @@ function GuidedTimer({
   const currentWorkoutEx = current && session ? session.exercises[current.exIndex] : null;
   const currentSet = currentWorkoutEx && current ? currentWorkoutEx.sets[current.setIndex] : null;
 
+  /**
+   * 当前动作上次练到什么水平。
+   * 只在「开始新的一次训练」时读取一次即可，但读取成本极低（本地数组查找），
+   * 依赖 currentWorkoutEx 变化重算，避免每次渲染都读 localStorage。
+   */
+  const lastPerf = useMemo(
+    () => (currentWorkoutEx ? getLastPerformance(currentWorkoutEx.slug) : null),
+    [currentWorkoutEx?.slug],
+  );
+
   const clearRest = useCallback(() => {
     if (restRef.current) clearInterval(restRef.current);
     restRef.current = null;
+    restEndsAtRef.current = null;
   }, []);
 
-  // 休息倒计时
+  /** 开始一段休息：只记住结束时刻，剩余时间由它反推 */
+  const beginRest = useCallback((seconds: number) => {
+    restEndsAtRef.current = Date.now() + seconds * 1000;
+    setRestRemaining(seconds);
+    setPhase('rest');
+    setRestRunning(true);
+  }, []);
+
+  // 休息倒计时：每 250ms 按真实时间重算剩余，避免整数秒节流后越走越慢
   useEffect(() => {
     if (!restRunning) return;
-    restRef.current = setInterval(() => {
-      setRestRemaining((prev) => {
-        if (prev <= 1) {
-          setRestRunning(false);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const tick = () => {
+      const end = restEndsAtRef.current;
+      if (end === null) return;
+      const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      setRestRemaining(left);
+      if (left <= 0) {
+        restEndsAtRef.current = null;
+        setRestRunning(false);
+        setPhase('work');
+      }
+    };
+    tick();
+    restRef.current = setInterval(tick, 250);
     return clearRest;
   }, [restRunning, clearRest]);
+
+  // 页面重新可见时立刻校正一次：后台被冻结期间不会累积误差
+  useEffect(() => {
+    if (!restRunning) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        const end = restEndsAtRef.current;
+        if (end !== null) setRestRemaining(Math.max(0, Math.round((end - Date.now()) / 1000)));
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [restRunning]);
 
   useEffect(() => clearRest, [clearRest]);
 
@@ -179,13 +225,9 @@ function GuidedTimer({
       );
       onSessionChange({ ...session, exercises });
       // 勾完一组自动进入休息
-      if (patch.completed) {
-        setPhase('rest');
-        setRestRemaining(restDuration);
-        setRestRunning(true);
-      }
+      if (patch.completed) beginRest(restDuration);
     },
-    [session, onSessionChange, restDuration],
+    [session, onSessionChange, restDuration, beginRest],
   );
 
   const toggleSet = useCallback(
@@ -205,6 +247,29 @@ function GuidedTimer({
       }
     },
     [session, patchSet, endRest],
+  );
+
+  /**
+   * 记录「实际完成值」。
+   *
+   * 计划值和实际值必须分开：计划是训练前的意图，实际是训练中的事实。
+   * 之前只有计划值，用户加重了、少做了都无处可落，渐进超负荷的闭环就断了。
+   * 这里写入 actualReps / actualWeight，未填则回落到计划值展示。
+   */
+  const setActual = useCallback(
+    (exIndex: number, setIndex: number, field: 'actualReps' | 'actualWeight', value: number | undefined) => {
+      if (!session) return;
+      const exercises = session.exercises.map((w, i) =>
+        i !== exIndex
+          ? w
+          : {
+              ...w,
+              sets: w.sets.map((s, j) => (j === setIndex ? { ...s, [field]: value } : s)),
+            },
+      );
+      onSessionChange({ ...session, exercises });
+    },
+    [session, onSessionChange],
   );
 
   /** 跳到某组：该组之前的全部标记完成，该组本身标记为未完成 */
@@ -352,6 +417,59 @@ function GuidedTimer({
             )}
           </div>
 
+          {/* 上次练这个动作的成绩：训练中最需要参考的一条信息 */}
+          {phase === 'work' && lastPerf && (
+            <p className="guided-last">上次 {formatLastPerformance(lastPerf)}</p>
+          )}
+
+          {/*
+            实际完成值：与计划值分开记录。
+            计划是「打算做多少」，这里是「真的做了多少」——不记就断了渐进超负荷的依据。
+            留空表示与计划一致，不用强迫用户每组都填。
+          */}
+          {phase === 'work' && current && currentSet && !currentSet.durationSec && (
+            <div className="guided-actual">
+              <span className="guided-actual-label">实际完成</span>
+              <input
+                className="set-input"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                max="999"
+                placeholder={currentSet.reps ? String(currentSet.reps) : '-'}
+                value={currentSet.actualReps ?? ''}
+                onChange={(e) =>
+                  setActual(
+                    current.exIndex,
+                    current.setIndex,
+                    'actualReps',
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+              />
+              <span className="set-input-label">次</span>
+              <input
+                className="set-input"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max="999"
+                step="0.5"
+                placeholder={currentSet.weight ? String(currentSet.weight) : '-'}
+                value={currentSet.actualWeight ?? ''}
+                onChange={(e) =>
+                  setActual(
+                    current.exIndex,
+                    current.setIndex,
+                    'actualWeight',
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+              />
+              <span className="set-input-label">kg</span>
+            </div>
+          )}
+
           <div className="guided-actions">
             <button
               className="btn btn-secondary btn-icon"
@@ -489,38 +607,72 @@ function IntervalTimer() {
   const [running, setRunning] = useState(false);
   const [round, setRound] = useState(1);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** 本轮结束时刻：与休息倒计时同理，用目标时刻反推剩余，避免后台节流漂移 */
+  const endsAtRef = useRef<number | null>(null);
 
   const clear = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = null;
   }, []);
 
+  // 每 250ms 按真实时间重算；跨段（训练→休息）时以「超出量」顺延，避免累积误差
   useEffect(() => {
     if (!running) return;
-    intervalRef.current = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) {
-          if (mode === 'work') {
-            setMode('rest');
-          } else {
-            setMode('work');
-            setRound((r) => r + 1);
-          }
-          return duration;
-        }
-        return prev - 1;
+    const tick = () => {
+      let end = endsAtRef.current;
+      if (end === null) {
+        end = Date.now() + duration * 1000;
+        endsAtRef.current = end;
+      }
+      const left = Math.round((end - Date.now()) / 1000);
+      if (left > 0) {
+        setRemaining(left);
+        return;
+      }
+      // 本段结束：切到下一段，并把溢出时间带入，长后台后不会白等一整轮
+      const overflow = Date.now() - end;
+      setMode((prevMode) => {
+        if (prevMode === 'work') return 'rest';
+        setRound((r) => r + 1);
+        return 'work';
       });
-    }, 1000);
+      endsAtRef.current = Date.now() + duration * 1000 - overflow;
+      setRemaining(Math.max(0, Math.round((endsAtRef.current - Date.now()) / 1000)));
+    };
+    tick();
+    intervalRef.current = setInterval(tick, 250);
     return clear;
-  }, [running, mode, duration, clear]);
+  }, [running, duration, clear]);
+
+  // 开始/暂停时重置截止时刻，暂停后继续不会带着旧时间戳跑
+  useEffect(() => {
+    endsAtRef.current = running ? Date.now() + remaining * 1000 : null;
+    // 仅在 running 切换时执行；remaining 作为起点读取一次即可
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
 
   // 时长变化时同步剩余时间
   useEffect(() => {
     setRemaining(duration);
+    if (running) endsAtRef.current = Date.now() + duration * 1000;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration]);
+
+  // 页面重新可见时立刻校正
+  useEffect(() => {
+    if (!running) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && endsAtRef.current !== null) {
+        setRemaining(Math.max(0, Math.round((endsAtRef.current - Date.now()) / 1000)));
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [running]);
 
   const reset = () => {
     clear();
+    endsAtRef.current = null;
     setRemaining(duration);
     setRunning(false);
     setRound(1);

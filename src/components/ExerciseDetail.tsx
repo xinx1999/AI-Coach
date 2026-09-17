@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { X, Plus, Check, MapPin } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { X, Plus, Check, MapPin, Star } from 'lucide-react';
 import { getAssetPath, type ClassifiedExercise } from '../lib/store';
 import { exerciseName, equipmentName, muscleName, exerciseTypeName } from '../lib/zh';
 import GuidePanel from './GuidePanel';
@@ -9,6 +9,8 @@ interface Props {
   alreadyAdded: boolean;
   onAdd: (ex: ClassifiedExercise) => void;
   onClose: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: (slug: string) => void;
 }
 
 /**
@@ -28,7 +30,17 @@ interface Props {
  */
 const POSE_LABELS = ['姿势 1', '姿势 2', '姿势 3'] as const;
 
-export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose }: Props) {
+export default function ExerciseDetail({
+  exercise,
+  alreadyAdded,
+  onAdd,
+  onClose,
+  isFavorite,
+  onToggleFavorite,
+}: Props) {
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -36,6 +48,42 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  /**
+   * 焦点管理：
+   * 弹窗打开后把焦点移入（否则键盘用户还在背后的卡片上），
+   * 并在 Tab 到边界时把焦点绕回弹窗内——没有这道「焦点陷阱」，
+   * 用户可以一路 Tab 到被遮住的页面内容上，读屏软件也会念出背景内容。
+   * 关闭时把焦点还给触发元素，让键盘用户不会丢失位置。
+   */
+  useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    closeBtnRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const root = modalRef.current;
+      if (!root) return;
+      const focusables = root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      prevFocus?.focus?.();
+    };
+  }, []);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -55,6 +103,7 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
         role="dialog"
         aria-modal="true"
         aria-label={`${zhName} 动作详情`}
+        ref={modalRef}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="detail-head">
@@ -62,9 +111,20 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
             <h3 className="detail-title">{zhName}</h3>
             {zhName !== exercise.name && <p className="detail-sub">{exercise.name}</p>}
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="关闭">
-            <X size={18} />
-          </button>
+          <div className="detail-head-actions">
+            <button
+              className={`icon-btn ${isFavorite ? 'fav-on' : ''}`}
+              onClick={() => onToggleFavorite(exercise.slug)}
+              aria-pressed={isFavorite}
+              aria-label={isFavorite ? '取消收藏' : '收藏'}
+              title={isFavorite ? '取消收藏' : '收藏'}
+            >
+              <Star size={17} fill={isFavorite ? 'currentColor' : 'none'} />
+            </button>
+            <button className="icon-btn" onClick={onClose} aria-label="关闭" ref={closeBtnRef}>
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* 三张动作插画并排，仅作姿势参考 */}

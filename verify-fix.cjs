@@ -1,8 +1,19 @@
-/** 验证修复：有进行中训练时应用新计划 → 必须弹确认，而不是静默替换 */
+/**
+ * 验证修复：有进行中训练时应用新计划 → 必须弹确认，而不是静默替换。
+ *
+ * 契约更新（截断存档）：
+ *   旧版 confirmApplyPlan 直接 setSession(null)，弹窗只能诚实写「不会存入历史」。
+ *   现在已完成的组会作为一次训练写进历史（未完成的部分丢弃），
+ *   所以断言从「不会存入历史」改为「如实说明会存多少组」+「历史里确实多了一条」。
+ *
+ * 同时：usePersistentState 已改为 null 不落盘（removeItem 而非写 "null"），
+ *   所以「没有进行中的训练」现在表现为键不存在，而不是值为字符串 "null"。
+ */
 const { chromium } = require('playwright-core');
 const EXE =
   'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
-const BASE = 'http://localhost:5173';
+const BASE = process.env.BASE || 'http://localhost:5173';
+const SESSION_KEY = 'strong-trainer-active-session';
 
 const SESSION = {
   name: '遗留训练',
@@ -74,7 +85,8 @@ const SESSION = {
   const modalText = await page.locator('.modal-card').innerText();
   console.log('  弹窗: ' + modalText.replace(/\n+/g, ' | '));
   check(modalText.includes('有进行中的训练'), '标题说明冲突原因');
-  check(modalText.includes('不会'), '明确告知不会存入历史');
+  check(modalText.includes('已完成的 1 组会存入历史记录'), '如实说明已完成的组会进历史');
+  check(!modalText.includes('不会存入历史'), '不再出现「不会存入历史」这句旧承诺');
 
   // 编排此时不应被改动
   const draftStillEmpty = await page.evaluate(
@@ -92,12 +104,12 @@ const SESSION = {
     '编排仍为空',
   );
   check(
-    (await page.evaluate(() => localStorage.getItem('strong-trainer-active-session'))) !== 'null',
+    (await page.evaluate((k) => localStorage.getItem(k), SESSION_KEY)) !== null,
     '进行中的训练仍保留',
   );
 
   // ---------- 4. 仍要替换 ----------
-  console.log('\n[4] 点「仍要替换」→ 写入新计划并清掉旧训练');
+  console.log('\n[4] 点「仍要替换」→ 写入新计划、清掉旧训练、已完成的组进历史');
   await page.locator('.wizard-apply').click();
   await page.waitForTimeout(300);
   await page.locator('.modal-card button', { hasText: '仍要替换' }).click();
@@ -107,13 +119,29 @@ const SESSION = {
   console.log(`  编排页动作数: ${buildCount}`);
   check(buildCount > 0, '新计划已写入编排');
   check(
-    (await page.evaluate(() => localStorage.getItem('strong-trainer-active-session'))) === 'null',
-    '旧的进行中训练已清掉',
+    (await page.evaluate((k) => localStorage.getItem(k), SESSION_KEY)) === null,
+    '旧的进行中训练已清掉（键不存在）',
   );
   check((await page.locator('.nav-btn .nav-dot').count()) === 0, '计时小红点已消失');
 
-  await goto('timer');
-  console.log('  计时页空状态:', await page.isVisible('.empty-state'));
+  // SESSION 只有 1 组 completed:true，所以历史里应恰好新增 1 条（截断存档）
+  const archived = await page.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem('strong-trainer-data') || '{}');
+    return {
+      count: (s.sessions || []).length,
+      totalSets: (s.sessions || []).reduce((n, x) => n + x.exercises.reduce((m, e) => m + e.sets.length, 0), 0),
+      name: (s.sessions || [])[0]?.name || '',
+    };
+  });
+  console.log(`  历史记录: ${archived.count} 条 / 共 ${archived.totalSets} 组 / ${archived.name}`);
+  check(archived.count === 1, '历史新增 1 条截断存档');
+  check(archived.totalSets === 1, '只存了已完成的 1 组');
+  check(archived.name.includes('中途结束'), '名称标明是中途结束');
+
+  // 注意：goto() 走的是 page.goto，而本应用是 hash 路由，
+  // 同文档导航不会重挂 App，React 状态里 session 仍指向旧值，
+  // 因此这里不能断言「空状态」——那是 goto/硬刷新之后才成立的。
+  // 只断言与路由无关的事实：旧训练已清掉、小红点已消失。
 
   // ---------- 5. 无进行中训练时不应弹窗 ----------
   console.log('\n[5] 没有进行中训练时 → 直接应用，不弹窗');
@@ -143,6 +171,18 @@ const SESSION = {
   console.log('  ' + txt.replace(/\n+/g, ' | '));
   check(txt.includes('没有动作'), '识别出空训练并给出说明');
   check(await page.isVisible('button:has-text("丢弃并去编排")'), '提供丢弃入口');
+
+  // ---------- 7. 不写空值 ----------
+  // hash 路由是同文档导航，模块会被重新求值、effect 会重跑；
+  // 若持久化 hook 无条件 setItem，一个从没碰过的键就会被创建成字符串 "null"。
+  console.log('\n[7] 没有值的键不应被凭空写出来');
+  await page.evaluate((k) => localStorage.removeItem(k), SESSION_KEY);
+  await goto('timer');
+  await goto('history');
+  await goto('build');
+  const phantom = await page.evaluate((k) => Object.keys(localStorage).includes(k), SESSION_KEY);
+  console.log(`  反复切页后 ${SESSION_KEY} 是否存在: ${phantom}`);
+  check(!phantom, '未把 null 写成字符串 "null"');
 
   console.log(`\n控制台错误: ${errors.length}`);
   errors.slice(0, 5).forEach((e) => console.log('  ' + e));

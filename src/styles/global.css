@@ -625,6 +625,48 @@ a { color: var(--accent); text-decoration: none; }
   line-height: 1.5;
 }
 
+/* ---------- 上次成绩提示 ---------- */
+/* 训练中「上次推了多少」比任何装饰都重要，用低饱和但不弱化的样式常驻 */
+.guided-last {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.guided-last::before {
+  content: '↺';
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ---------- 实际完成值输入 ---------- */
+/* 与计划值并排，留空即视为与计划一致，不强迫每组都填 */
+.guided-actual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.guided-actual-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+.guided-actual .set-input {
+  width: 62px;
+  text-align: center;
+}
+
 .finish-card {
   padding: 28px 20px;
   background: var(--surface);
@@ -973,6 +1015,168 @@ a { color: var(--accent); text-decoration: none; }
   .loc-tab { font-size: 12px; padding: 10px 8px; }
 }
 
+
+/* ---------- 收藏 ---------- */
+/* 星标独立于卡片点击，避免「想收藏却打开了详情」 */
+.card-fav {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-muted);
+  background: rgba(14, 14, 16, 0.6);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.exercise-card:hover .card-fav,
+.card-fav:focus-visible { opacity: 1; }
+/* 已收藏的常驻显示，否则用户看不出哪些收藏过 */
+.card-fav.on {
+  opacity: 1;
+  color: var(--accent);
+}
+.card-fav:hover { color: var(--accent); }
+
+.fav-btn {
+  margin-left: 6px;
+  color: var(--text-muted);
+  vertical-align: -1px;
+  border-radius: 4px;
+}
+.fav-btn:hover { color: var(--accent); }
+.fav-btn.on { color: var(--accent); }
+
+.detail-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.icon-btn.fav-on { color: var(--accent); }
+
+/* ---------- 编排页：顺序调整 / 上次成绩 / 预估时长 ---------- */
+/* 三个操作竖排在右侧，不挤压动作信息区 */
+.workout-item-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.workout-item-side .workout-item-remove { padding: 2px; }
+.workout-item-side .workout-item-remove:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+.workout-item-side .workout-item-remove:disabled:hover {
+  color: var(--text-muted);
+  background: none;
+}
+
+.workout-item-last {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.quick-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 6px 0;
+}
+
+/* ---------- 备份 / 恢复 ---------- */
+/* 数据只在本机，导出是唯一的自救通道，所以常驻历史页顶部而不是藏进设置 */
+.backup-card {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.backup-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.backup-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.backup-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.8;
+  margin-left: auto;
+}
+.backup-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.backup-actions .btn {
+  font-size: 13px;
+  padding: 8px 14px;
+}
+.backup-import { margin-top: 12px; }
+.backup-import-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.backup-import-hint code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+/* 文件选择器原生外观与深色主题冲突，收窄到只保留可点区域 */
+.backup-file {
+  width: 100%;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.backup-file::file-selector-button {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+  margin-right: 10px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.backup-file::file-selector-button:hover { border-color: var(--accent); }
+.backup-alert {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 9px 12px;
+  font-size: 12px;
+  color: var(--red);
+  background: rgba(248, 113, 113, 0.1);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+.backup-alert.ok {
+  color: var(--green);
+  background: rgba(74, 222, 128, 0.1);
+}
+.backup-alert svg { flex-shrink: 0; }
 
 /* ---------- 频次统计 ---------- */
 .stats-card {

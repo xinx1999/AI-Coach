@@ -13,6 +13,8 @@ import {
   countSets,
   createWorkoutExercise,
   recordSession,
+  loadFavorites,
+  toggleFavorite,
   type ClassifiedExercise,
 } from './lib/store';
 import type { Screen, WorkoutExercise, WorkoutSession } from './lib/types';
@@ -43,6 +45,8 @@ export default function App() {
     null,
   );
   const [notes, setNotes] = usePersistentState<string>(DRAFT_NOTES_KEY, '');
+  /** 收藏的动作。存在与历史同一份数据里，所以从 loadFavorites 读初值 */
+  const [favorites, setFavorites] = useState<string[]>(loadFavorites);
   const [finished, setFinished] = useState<WorkoutSession | null>(null);
   /** 待确认的新计划：有进行中的训练时先暂存，等用户确认再写入 */
   const [pendingPlan, setPendingPlan] = useState<WorkoutExercise[] | null>(null);
@@ -52,6 +56,15 @@ export default function App() {
   }, [screen]);
 
   const selectedSlugs = useMemo(() => workout.map((w) => w.slug), [workout]);
+
+  /** 确认弹窗要如实告诉用户「会保住多少」，所以先数出已完成的组 */
+  const completedSets = useMemo(
+    () =>
+      session
+        ? session.exercises.reduce((sum, w) => sum + w.sets.filter((s) => s.completed).length, 0)
+        : 0,
+    [session],
+  );
 
   const handleAddToWorkout = useCallback(
     (exercise: ClassifiedExercise) => {
@@ -105,6 +118,10 @@ export default function App() {
     setScreen('build');
   }, [setSession]);
 
+  const handleToggleFavorite = useCallback((slug: string) => {
+    setFavorites(toggleFavorite(slug));
+  }, []);
+
   /**
    * 计划生成后覆盖编排页。
    * 若此时有进行中的训练，先弹确认：旧训练与新旧计划对不上，
@@ -122,13 +139,37 @@ export default function App() {
     [session, setWorkout],
   );
 
-  /** 确认用新计划替换：丢弃旧训练，写入新编排 */
+  /**
+   * 确认用新计划替换。
+   *
+   * 旧版本这里是直接 setSession(null) 把进行中的训练丢掉——弹窗虽然诚实写了
+   * 「不会存入历史」，但用户刚做完几组，只是想去生成一份新计划，
+   * 却被迫在「放弃训练」和「放弃计划」之间二选一，这并不合理。
+   *
+   * 现在改为【截断存档】：把已完成的组作为一次训练写进历史，未完成的部分丢弃。
+   * 只练了 1 组也存，因为「练了 1 组」比「整次消失」有价值得多。
+   * 一组都没完成则没有任何可存的事实，不产生空记录污染历史。
+   */
   const confirmApplyPlan = useCallback(() => {
+    if (session) {
+      const exercises = session.exercises
+        .map((w) => ({ ...w, sets: w.sets.filter((s) => s.completed) }))
+        .filter((w) => w.sets.length > 0);
+      if (exercises.length > 0) {
+        recordSession({
+          name: `${session.name}（中途结束）`,
+          notes: session.notes,
+          exercises,
+          startedAt: session.startedAt,
+          completedAt: new Date().toISOString(),
+        });
+      }
+    }
     if (pendingPlan) setWorkout(pendingPlan);
     setPendingPlan(null);
     setSession(null);
     setScreen('build');
-  }, [pendingPlan, setWorkout, setSession]);
+  }, [pendingPlan, session, setWorkout, setSession]);
 
   const navItems: Array<{ id: Screen; label: string; icon: React.ReactElement }> = [
     { id: 'browse', label: '浏览', icon: <Search size={16} /> },
@@ -169,7 +210,12 @@ export default function App() {
 
       <main className="app-body">
         {screen === 'browse' && (
-          <BrowseView onSelect={handleAddToWorkout} selectedSlugs={selectedSlugs} />
+          <BrowseView
+            onSelect={handleAddToWorkout}
+            selectedSlugs={selectedSlugs}
+            favorites={favorites}
+            onToggleFavorite={handleToggleFavorite}
+          />
         )}
         {screen === 'plan' && <PlanWizard onApply={handleApplyPlan} />}
         {screen === 'build' && (
@@ -181,6 +227,8 @@ export default function App() {
             onNotesChange={setNotes}
             session={session}
             onResumeSession={() => setScreen('timer')}
+            favorites={favorites}
+            onToggleFavorite={handleToggleFavorite}
           />
         )}
         {screen === 'timer' && (
@@ -249,7 +297,13 @@ export default function App() {
               </span>
             </div>
             <div className="modal-sub-block" style={{ marginTop: 14 }}>
-              被结束的这次训练<strong>不会</strong>存入历史记录。
+              {completedSets > 0 ? (
+                <>
+                  已完成的 <strong>{completedSets} 组</strong>会存入历史记录，未完成的部分丢弃。
+                </>
+              ) : (
+                <>这次训练还没有完成的组，结束它不会留下记录。</>
+              )}
             </div>
             <div className="modal-actions-3">
               <button className="btn btn-secondary" onClick={() => setPendingPlan(null)}>
