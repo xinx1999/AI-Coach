@@ -26,9 +26,9 @@ export const allExercises: Exercise[] = (catalog as CatalogEntry[]).map((e) => (
   secondaryMuscles: e.secondary,
   isStretch: e.stretch,
   frames: [
-    { index: 1, path: `assets/${e.slug}/frame-1.png` },
-    { index: 2, path: `assets/${e.slug}/frame-2.png` },
-    { index: 3, path: `assets/${e.slug}/frame-3.png` },
+    { index: 1, path: `assets/${e.slug}/frame-1.svg` },
+    { index: 2, path: `assets/${e.slug}/frame-2.svg` },
+    { index: 3, path: `assets/${e.slug}/frame-3.svg` },
   ],
 }) as Exercise);
 
@@ -76,9 +76,9 @@ export function countByLocation(loc: Location): number {
   return classifiedExercises.filter((e) => e.location === loc).length;
 }
 
-/** 动作图统一放在 public/assets/<slug>/frame-N.png，不走 npm 包的 assets 目录 */
+/** 动作图统一放在 public/assets/<slug>/frame-N.svg，不走 npm 包的 assets 目录 */
 export function getAssetPath(slug: string, frame: 1 | 2 | 3): string {
-  return `/assets/${slug}/frame-${frame}.png`;
+  return `/assets/${slug}/frame-${frame}.svg`;
 }
 
 function uid(): string {
