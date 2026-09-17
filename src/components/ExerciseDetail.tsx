@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Plus, Check, Play, Pause, MapPin } from 'lucide-react';
 import { getAssetPath, type ClassifiedExercise } from '../lib/store';
 import { exerciseName, equipmentName, muscleName, exerciseTypeName } from '../lib/zh';
@@ -10,20 +10,26 @@ interface Props {
   onClose: () => void;
 }
 
-const FRAME_MS = 900; // 每帧停留时长，太快看不清动作，太慢显得卡
+const FRAME_MS = 1100; // 每帧停留时长
 
 /**
  * 三帧循环动画。
- * 先把三张图 new Image() 预加载，全部 onload 后再开始轮播，
- * 否则第一轮切换时会出现空白闪烁。
+ *
+ * 做法上有个关键点：三张图**同时叠放在 DOM 里**，靠 CSS opacity 交叉淡入淡出切换，
+ * 而不是替换 <img src>。原因是替换 src 会产生硬切换（瞬间跳帧），
+ * 视觉上像幻灯片翻页；叠放 + opacity 过渡则是渐变，观感接近真实运动。
+ * 这样第 3 帧回到第 1 帧同样是渐变，不会在循环接缝处出现突兀的跳变。
+ *
+ * 另外先把三张图全部预加载完成再开始播放，否则首轮切换会因未解码而闪白。
  */
 function useFrameAnimation(slug: string, playing: boolean) {
   const [frame, setFrame] = useState<1 | 2 | 3>(1);
   const [ready, setReady] = useState(false);
 
-  // 预加载
   useEffect(() => {
     let alive = true;
+    setReady(false);
+    setFrame(1);
     const imgs = ([1, 2, 3] as const).map((f) => {
       const img = new Image();
       img.src = getAssetPath(slug, f);
@@ -46,7 +52,6 @@ function useFrameAnimation(slug: string, playing: boolean) {
     };
   }, [slug]);
 
-  // 轮播
   useEffect(() => {
     if (!playing || !ready) return;
     const t = setInterval(() => {
@@ -61,9 +66,7 @@ function useFrameAnimation(slug: string, playing: boolean) {
 export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose }: Props) {
   const [playing, setPlaying] = useState(true);
   const { frame, ready } = useFrameAnimation(exercise.slug, playing);
-  const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Esc 关闭
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -72,7 +75,6 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // 打开时禁止背景滚动
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -88,7 +90,6 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal detail-modal"
-        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={`${zhName} 动作详情`}
@@ -104,18 +105,23 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
           </button>
         </div>
 
-        {/* ---- 动画演示区 ---- */}
+        {/* ---- 动画演示区：三帧叠放，opacity 交叉淡入淡出 ---- */}
         <div className="demo-stage">
-          <img
-            className="demo-frame"
-            src={getAssetPath(exercise.slug, frame)}
-            alt={`${zhName} 动作演示 第 ${frame} 帧`}
-          />
-
-          {/* 帧指示点 */}
-          <div className="demo-dots" role="tablist" aria-label="动作帧">
+          <div className="demo-stack">
             {([1, 2, 3] as const).map((f) => (
-              <span key={f} className={`demo-dot ${frame === f ? 'on' : ''}`} aria-hidden="true" />
+              <img
+                key={f}
+                className={`demo-layer ${frame === f && ready ? 'visible' : ''}`}
+                src={getAssetPath(exercise.slug, f)}
+                alt={f === 1 ? `${zhName} 动作演示` : ''}
+                aria-hidden={f === 1 ? undefined : true}
+              />
+            ))}
+          </div>
+
+          <div className="demo-dots" aria-hidden="true">
+            {([1, 2, 3] as const).map((f) => (
+              <span key={f} className={`demo-dot ${frame === f ? 'on' : ''}`} />
             ))}
           </div>
 
@@ -132,12 +138,9 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
         </div>
 
         <p className="demo-caption">
-          {playing
-            ? '正在循环演示动作的三个关键帧'
-            : '已暂停，可点击播放继续观看'}
+          {playing ? '循环演示动作的三个关键帧' : '已暂停，点击播放继续观看'}
         </p>
 
-        {/* ---- 属性 ---- */}
         <div className="detail-attrs">
           <span className="detail-tag">
             <MapPin size={12} />
@@ -158,7 +161,6 @@ export default function ExerciseDetail({ exercise, alreadyAdded, onAdd, onClose 
           </div>
         )}
 
-        {/* ---- 操作 ---- */}
         <div className="detail-actions">
           {alreadyAdded ? (
             <button className="btn btn-secondary" disabled style={{ width: '100%' }}>
