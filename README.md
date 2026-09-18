@@ -63,10 +63,46 @@ node audit-product.cjs                          # 另一个终端
 | `e2e-landing.cjs` | 首次落点优先级 + 存储坏数据健壮性 |
 | `e2e-pwa.cjs` | PWA（manifest / SW / 离线缓存） |
 | `e2e-regression.cjs` / `e2e-wizard.cjs` / `e2e-optimize.cjs` | 主线回归 |
+| `e2e-responsive.cjs` | **三端适配**（7 档宽度 × 5 个页面：导航可达性、无横向溢出） |
+| `e2e-equipment.cjs` / `e2e-plan-loc.cjs` | 器械筛选、场地标签 |
 | `verify-fix.cjs` / `verify-media.cjs` | 历史修复复核、媒体完整性 |
+| `verify-live.cjs` | **线上站点**验证（真实浏览器跑 Pages 地址，不需要本地服务器） |
 
-这些脚本的**断言**是产品契约（取值口径、坐标映射、落点优先级），改了功能要同步改断言，
+`e2e-responsive.cjs` 跑在 dev server（5173）上，其余大多数脚本跑在 preview（4199）上。
+`verify-live.cjs` 直接把线上地址写死在里面，改域名时记得同步。
+
+这些脚本的**断言**是产品契约（取值口径、坐标映射、落点优先级、导航可达性），改了功能要同步改断言，
 而不是改断言迁就实现。
+
+## 响应式（三端适配）
+
+断点按**可用宽度**切，不按设备型号。定义在 `src/styles/global.css` 末尾：
+
+| 档位 | 宽度 | 行为 |
+| --- | --- | --- |
+| 桌面 | ≥ 1025px | 完整布局，内容居中于 940px（动作库 1180px） |
+| 平板 | 641–1024px | 表单并排、动作网格降列数、内边距收窄 |
+| 手机 | ≤ 640px | 单列堆叠，**导航只留图标**，弹窗改底部抽屉 |
+| 极小屏 | ≤ 380px | 进一步压缩顶栏与网格 |
+| 横屏矮屏 | 高度 ≤ 520px | 按高度收窄，优先保证垂直空间 |
+
+几个容易踩的点：
+
+- **导航文字必须包在 `.nav-btn-label` span 里。** 窄屏靠 `display:none` 把它藏起来只留图标，
+  五个入口才排得下。写裸文本节点（`{icon} {label}`）的话那条 CSS 选不中，
+  按钮会被撑宽、最后一个被推出视口——而且 `document.scrollWidth` 检测不到，
+  因为溢出发生在 `.app-nav` 内部。
+- **`.app-nav` 不要用 `overflow-x: auto`。** 触屏上横向滚动条几乎不会被发现，
+  用户只会觉得「有两个按钮不见了」。正确做法是允许收缩 + 隐藏文字。
+- **`.app-title` 要 `flex-shrink: 0`，`.app-nav` 要 `min-width: 0`。**
+  flex 子项默认 `min-width: auto`，不加就压不下去，内容会反向溢出到父容器外，
+  于是标题（z-index 更高）盖住按钮，表现为「前两个按钮点不动」。
+- **`100dvh` 而不是 `100vh`。** 手机浏览器地址栏收起前的 `100vh` 会把底部推出可视区。
+- **`viewport-fit=cover` 已开**，所以底部/左右要补 `env(safe-area-inset-*)`，
+  否则 iPhone 的横条和刘海会压住内容。
+
+**改了布局请跑 `node e2e-responsive.cjs`**（先起 5173）。它断言的是契约而不是像素值，
+所以调整内边距不会误报；但能挡住「有按钮跑到视口外」这类真问题。
 
 ## 架构要点
 
@@ -84,8 +120,13 @@ node audit-product.cjs                          # 另一个终端
 
 已配好 Actions 工作流 `.github/workflows/deploy-pages.yml`，推到 `master`/`main` 即自动发布。
 
-**一次性设置**（只做一次）：仓库 `Settings → Pages → Build and deployment → Source`
-选 **GitHub Actions**。选错了不会有任何报错，只是 Pages 一直不更新。
+**一次性设置**（只做一次）：仓库 `Settings → Pages`，把 `Source` 选成 **GitHub Actions**。
+直达地址 `https://github.com/<用户>/<仓库>/settings/pages`。
+
+> 注意：`Build and deployment` 是旧版界面的小节标题，新版已删掉，左侧栏里**只有 `Pages`**。
+> 另外新仓库的 Pages 默认未启用，此时 `actions/configure-pages` 会直接失败，
+> 而日志不会提示「Pages 没开」——表现为构建的前几步全绿、只挂在 `Setup Pages`，
+> 且 `deploy` 作业被 skipped。判断方法：`GET /repos/{owner}/{repo}` 看 `has_pages` 是否为 false。
 
 **访问地址**：`https://<你的用户名>.github.io/<仓库名>/`
 

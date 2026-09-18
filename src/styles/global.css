@@ -98,7 +98,12 @@ a:hover { text-decoration: underline; }
 .app-shell {
   display: flex;
   flex-direction: column;
+  /* 100vh 在手机浏览器上是个陷阱：它等于「地址栏收起时的最大高度」，
+     页面初次渲染时地址栏还在，底部就会被推到可视区外，
+     用户必须先滚一下才能看到底部导航/内容末尾。
+     dvh 是动态高度，会跟着地址栏收放变化；不支持的旧浏览器回落到 vh。 */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -126,6 +131,10 @@ a:hover { text-decoration: underline; }
   font-weight: 700;
   letter-spacing: -0.02em;
   white-space: nowrap;
+  /* 不被导航挤压。没有这条时，窄屏下导航会把标题压扁成两行，
+     或者反过来让按钮溢到标题底下（z-index 更高的标题会盖住按钮，
+     表现为「前两个按钮点不动」）。 */
+  flex-shrink: 0;
 }
 .app-title::before {
   content: '';
@@ -134,6 +143,7 @@ a:hover { text-decoration: underline; }
   border-radius: 6px;
   background: linear-gradient(135deg, var(--accent), #F09030);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
 }
 .app-title span { color: var(--accent); }
 
@@ -143,8 +153,13 @@ a:hover { text-decoration: underline; }
   background: var(--surface-2);
   border-radius: 11px;
   padding: 3px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  /* 窄屏时按钮组会比可用宽度宽。这里**不能**用 overflow-x:auto：
+     横向滚动条在触屏上几乎不会被发现，用户只会觉得「有两个按钮不见了」。
+     改为允许收缩 + 隐藏文字，见下方媒体查询。
+     min-width:0 是关键 —— flex 子项默认 min-width:auto，
+     不加就压不下去，内容会反过来溢到父容器外（钻到标题底下）。 */
+  min-width: 0;
+  flex-shrink: 1;
 }
 .app-nav::-webkit-scrollbar { display: none; }
 
@@ -158,8 +173,13 @@ a:hover { text-decoration: underline; }
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
+  /* 允许收缩，配合 .nav-btn-label 的隐藏实现「图标优先」降级 */
+  min-width: 0;
+  flex-shrink: 0;
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
+.nav-btn > svg { flex-shrink: 0; }
+.nav-btn-label { min-width: 0; }
 .nav-btn:hover { color: var(--text); background: var(--surface-2); }
 .nav-btn.active {
   color: var(--text);
@@ -494,20 +514,30 @@ a:hover { text-decoration: underline; }
 }
 .pill.active .pill-count { background: rgba(255, 255, 255, 0.24); color: #fff; }
 
-.loc-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.loc-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
 .loc-tab {
-  flex: 1;
+  /* flex:1 让三个标签均分宽度；min-width:0 是必须的 ——
+     flex 子项默认 min-width:auto，内容（「健身房」三字 + 数字）撑住不肯缩，
+     三个加起来就会顶破容器、把最后一个推到视口外。
+     配合 white-space:nowrap，文字宁可被数字挤也不折行。 */
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 11px 12px;
+  gap: 6px;
+  padding: 11px 8px;
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
+  white-space: nowrap;
   transition: all 0.16s ease;
 }
 .loc-tab:hover { border-color: var(--text-muted); color: var(--text); }
@@ -2091,31 +2121,138 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar-thumb:hover { background: #4E4E5A; }
 
 /* ============================================================
-   响应式
+   响应式 —— 三端适配
+   ------------------------------------------------------------
+   三档，按「可用宽度」而不是按设备型号切：
+
+     桌面   ≥ 1025px   完整布局，动作用多列网格
+     平板   641–1024px 表单并排、网格降列数、内边距收窄
+     手机   ≤ 640px    单列堆叠，导航只留图标
+
+   断点取 640 而不是 720：iPad 竖屏是 768，
+   若断点设在 720，iPad 竖屏会落到「桌面」档位、留出过宽的行长。
+   640 这条线能把常见手机（320–430）和 iPad 竖屏干净地分开。
+
+   安全区：viewport-fit=cover 已开，iPhone 的横条/刘海会压到内容，
+   底部与左右必须补 env(safe-area-inset-*)，否则横屏时按钮会被挡。
    ============================================================ */
-@media (max-width: 900px) {
-  .exercise-grid { grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); }
+
+/* ---------- 平板：641–1024px ---------- */
+@media (max-width: 1024px) {
+  .app-header { padding: 0 18px; }
+  .app-body { padding: 24px 18px; }
+  .app-body > .browse { max-width: 100%; }
+  .exercise-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
 }
 
-@media (max-width: 720px) {
-  .app-header { padding: 0 14px; height: 56px; }
-  .app-nav { flex: 1; justify-content: flex-end; }
-  .nav-btn { padding: 7px 11px; font-size: 12.5px; }
+/* ---------- 手机：≤ 640px ---------- */
+@media (max-width: 640px) {
+  /* 顶栏：把「文字+图标」降级为「只有图标」，五个入口才排得下。
+     图标按钮必须有足够的点击尺寸，36px 是触屏的可接受下限。 */
+  .app-header {
+    padding: 0 12px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    height: 54px;
+    gap: 10px;
+  }
+  .app-title { font-size: 15px; }
+  .app-title::before { width: 18px; height: 18px; }
+  .app-nav { gap: 1px; padding: 2px; }
+  .nav-btn {
+    padding: 8px 10px;
+    font-size: 12.5px;
+    /* 图标之间的最小触控宽度，低于这个值手指点不准 */
+    min-width: 36px;
+    justify-content: center;
+  }
   .nav-btn-label { display: none; }
-  .app-body { padding: 18px 14px; }
-  .page-title { font-size: 22px; }
-  .exercise-grid { grid-template-columns: repeat(auto-fill, minmax(144px, 1fr)); gap: 11px; }
-  .detail-modal { max-width: 100%; max-height: 94vh; border-radius: var(--radius-lg) var(--radius-lg) 0 0; align-self: flex-end; }
-  .demo { max-height: 280px; }
-  .timer-ring { width: 210px; height: 210px; }
-  .timer-number { font-size: 60px; }
-  .guided-count { font-size: 50px; }
-  .modal-card { padding: 28px 22px; }
-  .wizard-field-row { flex-direction: column; gap: 11px; }
+  /* 隐藏文字后 gap 仍会占位，去掉让图标真正居中 */
+  .nav-btn { gap: 0; }
+  .nav-btn:has(.nav-badge), .nav-btn:has(.nav-dot) { gap: 3px; }
+
+  .app-body {
+    padding: 16px 12px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  /* 底部安全区，避免 iPhone 横条盖住页面末尾 */
+  .app-body { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+
+  .page-title { font-size: 21px; }
+  .page-sub { font-size: 13px; }
+
+  /* 动作网格：降到两列起步，卡片太窄会让动作名换行到看不全 */
+  .exercise-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  /* 表单一律单列堆叠 —— 手机上并排两个输入框会窄到看不全数值 */
+  .wizard-field-row { flex-direction: column; gap: 12px; }
+  .wizard-block { padding: 16px 14px; }
   .bmi-preview-hint { margin-left: 0; width: 100%; }
-  .muscle-chip { font-size: 12px; padding: 6px 10px; }
+
+  /* 场地 / 训练水平这类两段式选择器：保持两列但收紧内边距，
+     它们只有两个字，压窄也还能读 */
+  .wizard-seg { gap: 8px; }
+  .wizard-seg-btn { padding: 12px 8px; }
+  .wizard-seg-hint { font-size: 10px; }
+
+  .muscle-chip { font-size: 12px; padding: 6px 9px; }
   .loc-tab { font-size: 12px; padding: 10px 8px; }
+
+  /* 弹窗改成底部抽屉：手机上从底部升起的面板比居中小窗更好按 */
+  .detail-modal {
+    max-width: 100%;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    align-self: flex-end;
+  }
+  .demo { max-height: 240px; }
+
+  .timer-ring { width: 200px; height: 200px; }
+  .timer-number { font-size: 56px; }
+  .guided-count { font-size: 48px; }
+  .guided-demo { width: 108px; height: 108px; }
+  .modal-card { padding: 24px 18px; }
+
   .history-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+
+  /* 底部信息区在窄屏上左右各留一点，别贴边 */
+  .app-footer { margin-top: 36px; padding: 14px 4px 20px; }
+}
+
+/* ---------- 极小屏：≤ 380px ---------- */
+@media (max-width: 380px) {
+  /* 320–380 这一段五个图标 + 标题会很紧，进一步压缩 */
+  .app-header { padding: 0 8px; height: 50px; gap: 6px; }
+  .app-title { font-size: 14px; gap: 6px; }
+  .app-title::before { width: 16px; height: 16px; }
+  .nav-btn { padding: 7px 7px; min-width: 32px; }
+  .app-body { padding: 14px 10px; }
+  .page-title { font-size: 19px; }
+  .exercise-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+  .timer-ring { width: 176px; height: 176px; }
+  .timer-number { font-size: 48px; }
+}
+
+/* ---------- 横屏矮屏（手机转横）：垂直空间优先 ---------- */
+@media (max-height: 520px) and (orientation: landscape) {
+  .app-header { height: 46px; }
+  .timer-ring { width: 150px; height: 150px; margin-bottom: 12px; }
+  .timer-number { font-size: 40px; }
+  .guided-count { font-size: 36px; }
+  .demo { max-height: 160px; }
+}
+
+/* ---------- 触屏：去掉 hover 残留 ---------- */
+@media (hover: none) {
+  /* 触屏上 :hover 会黏在最后点过的元素上，看起来像坏了。
+     只保留 active 态即可。 */
+  .nav-btn:hover { color: inherit; background: none; }
+  .nav-btn.active:hover { color: var(--text); background: var(--surface); }
 }
 
 @media (prefers-reduced-motion: reduce) {

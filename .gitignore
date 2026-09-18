@@ -53,6 +53,21 @@ public/media/
 !verify-backlog.cjs
 # diag-history-sort 是排查排序问题时写的，保留可复现当时的诊断过程
 !diag-history-sort.cjs
+
+# 三端适配的回归网。断言的是「契约」而不是像素值：
+#   导航按钮必须全部在视口内、可点击、点击后真的切页；各页面不得横向溢出。
+# 之所以必须有它：上一版的 .app-nav 带 overflow-x:auto，
+# 按钮滚出可视区时 document.scrollWidth 完全不变（文档级检查全绿），
+# 但用户在 320px 下根本看不到「浏览」按钮——只有逐按钮量 rect 才能发现。
+!e2e-responsive.cjs
+# 响应式审计与截图脚本：数字口径的复核 + 人工看图用
+!audit-responsive.cjs
+!audit-header.cjs
+!shot-responsive.cjs
+
+# 三端截图产物（跑一次变一次，不入库）
+responsive-shots/
+
 # e2e-equipment 断言的是「生成结果里的器械 ⊆ 用户勾选的 ∪ {自重}」，
 # 这是用户报过的原始问题（在家生成了没有的器械），必须长期守着。
 !e2e-equipment.cjs

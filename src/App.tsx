@@ -235,8 +235,13 @@ export default function App() {
               key={id}
               className={`nav-btn ${screen === id ? 'active' : ''}`}
               onClick={() => setScreen(id)}
+              aria-label={label}
+              title={label}
             >
-              {icon} {label}
+              {icon}
+              {/* 文字必须包在 span 里。窄屏上 CSS 会把它 display:none 只留图标，
+                  直接写裸文本节点的话那条规则选不中，文字会挤成一团被裁掉。 */}
+              <span className="nav-btn-label">{label}</span>
               {id === 'build' && workout.length > 0 && (
                 <span className="nav-badge">{workout.length}</span>
               )}
