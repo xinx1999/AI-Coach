@@ -20,12 +20,7 @@
  * 而 Pages 的 404 会让「按钮可点击」这类断言以完全不同的方式失败。
  */
 
-const { chromium } = require('playwright-core');
-
-const BASE = process.env.BASE || 'http://localhost:5173';
-const IS_REMOTE = /^https?:\/\/(?!localhost|127\.0\.0\.1)/.test(BASE);
-const EXECUTABLE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+const { chromium, executablePath, BASE, IS_REMOTE } = require('./e2e-setup.cjs');
 
 const WIDTHS = [
   { w: 320, name: '极小手机', iconOnly: true },
@@ -53,7 +48,7 @@ function check(ok, label, extra = '') {
 }
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: EXECUTABLE });
+  const browser = await chromium.launch({ executablePath });
   console.log(`\n目标: ${BASE}${IS_REMOTE ? '  (线上)' : '  (本地)'}`);
 
   for (const { w, name, iconOnly } of WIDTHS) {

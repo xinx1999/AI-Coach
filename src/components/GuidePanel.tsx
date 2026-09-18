@@ -1,44 +1,103 @@
-import { getExercise, displayName } from '../lib/store';
+import { Activity, AlertTriangle, Wind } from 'lucide-react';
+import { getExercise } from '../lib/store';
+import { COACHING_DISCLAIMER, coachingFor } from '../lib/coaching';
 import type { Exercise } from '../lib/types';
 
 interface Props {
   slug: string;
   /** 紧凑模式：只列步骤，用于计时页的速查 */
   compact?: boolean;
+  /**
+   * 步骤是否已由别处呈现（详情页的播放器里有一份可点击的步骤列表）。
+   *
+   * 播放器把「步骤」和「画面帧」绑在一起，那里的步骤是可交互的；
+   * 这里再列一遍纯文本就是重复内容，用户要滚两遍同样的字。
+   * 所以详情页传 true，本组件只补充呼吸和错误两块；
+   * 计时页的折叠区没有播放器步骤，传 false 正常显示。
+   */
+  stepsHandled?: boolean;
 }
 
 /**
  * 动作要领。
  *
- * 文案直接来自数据集自带的 `instruction_steps.zh`（人工撰写的中文分步说明），
- * 不再由本项目自撰 —— 之前那版 302 条自写教程既不可信、也没必要，
- * 数据集本来就有更完整的中文内容。
+ * 三块内容，按「看动作时需要的顺序」排：
+ *   1. 分步说明 —— 数据集的 `instruction_steps.zh`，人工撰写，这部分是原始素材
+ *   2. 呼吸节奏 —— 数据集里只有 11% 的动作有，其余按向心呼气/离心吸气的通用原则生成
+ *   3. 常见错误 —— 数据集里基本没有（0.8%），按动作特征生成
+ *
+ * 后两块由 lib/coaching.ts 生成，理由和依据都写在那个文件顶部。
+ * 这里负责呈现，不做判断。
  */
-export default function GuidePanel({ slug, compact = false }: Props) {
+export default function GuidePanel({ slug, compact = false, stepsHandled = false }: Props) {
   const ex = getExercise(slug);
   if (!ex) return null;
 
   const steps = ex.steps ?? [];
-  if (steps.length === 0 && !ex.instructions) return null;
+  const tip = coachingFor(ex);
+  const hasSteps = steps.length > 0;
+  /** 步骤由外部呈现时，这里不再重复列 */
+  const showSteps = !stepsHandled;
+
+  if (!hasSteps && !ex.instructions) return null;
 
   return (
     <section className={`guide ${compact ? 'guide-compact' : ''}`}>
-      <div className="guide-head">
-        <h3 className="guide-title">动作要领</h3>
-        {/* 非紧凑模式下动作名已在弹窗标题里出现过，这里不再重复；
-            紧凑模式（计时页速查）没有标题，才需要带上名字 */}
-        {compact && <span className="guide-src">{displayName(ex)}</span>}
-      </div>
+      {showSteps && (
+        <>
+          <div className="guide-head">
+            <h3 className="guide-title">
+              <Activity size={12} /> 动作要领
+            </h3>
+          </div>
 
-      {steps.length > 0 ? (
-        <ol className="guide-steps">
-          {steps.map((s, i) => (
-            <li key={i}>{s}</li>
-          ))}
-        </ol>
-      ) : (
-        <p className="guide-text">{ex.instructions}</p>
+          {hasSteps ? (
+            <ol className="guide-steps">
+              {steps.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ol>
+          ) : (
+            <p className="guide-text">{ex.instructions}</p>
+          )}
+        </>
       )}
+
+      {/* 步骤由播放器承担时，这里还需要一个标题，否则整块内容没有上下文 */}
+      {!showSteps && (
+        <div className="guide-head">
+          <h3 className="guide-title">
+            <Activity size={12} /> 动作要领
+          </h3>
+        </div>
+      )}
+
+      {tip.breathing && (
+        <div className="guide-block">
+          <div className="guide-block-head">
+            <Wind size={13} />
+            呼吸节奏
+          </div>
+          <p className="guide-block-text">{tip.breathing}</p>
+        </div>
+      )}
+
+      {tip.mistakes.length > 0 && (
+        <div className="guide-block guide-block-warn">
+          <div className="guide-block-head">
+            <AlertTriangle size={13} />
+            常见错误
+          </div>
+          <ul className="guide-mistakes">
+            {tip.mistakes.map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 免责说明必须跟着这两块生成内容一起出现，不能只在某个角落提一次 */}
+      {!compact && <p className="guide-note">{COACHING_DISCLAIMER}</p>}
     </section>
   );
 }

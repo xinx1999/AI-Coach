@@ -744,14 +744,25 @@ a:hover { text-decoration: underline; }
  * 清晰、颜色准确，看起来像嵌在深色界面里的一块「灯箱」。 */
 .demo {
   position: relative;
-  height: 236px;
   background: var(--media-bg);
   border-bottom: 1px solid var(--media-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
   box-shadow: inset 0 -20px 32px -20px rgba(0, 0, 0, 0.5);
+  /* 高度改由内容决定：播放器带控制条和步骤列表，固定高度会把它们压扁或裁掉。
+     原来写死 height: 236px 是因为里面只有一个 <img>，现在不成立了。 */
+  padding-top: 0;
+}
+.demo-player-wrap { position: relative; width: 100%; }
+/* 浮层（在家/健身房标签、收藏、关闭）绝对定位到播放器上，且只覆盖画面区。
+   为什么不能盖满整块：.demo 现在除画面外还有控制条和步骤列表，
+   浮层盖满会把「下一步」「播放」的点击全部截走。
+   所以把画面高度提成变量，浮层和 stage 共用同一个值，改一处即同步。 */
+.demo .demo-overlay {
+  top: 0;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  height: var(--player-stage-h);
 }
 .demo-media,
 .demo-static {
@@ -963,6 +974,267 @@ a:hover { text-decoration: underline; }
   border-top: 1px dashed var(--border);
   line-height: 1.6;
 }
+
+/* ---------- 要领里的「呼吸节奏」「常见错误」 ----------
+
+   这两块是生成内容（见 lib/coaching.ts），视觉上要和数据集原文的步骤列表
+   明确区分开：步骤是「做什么」，这两块是「别做错什么」。
+   用左边框 + 淡背景做成引用块的样子，错误块再加一层警示色。 */
+.guide-block {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border-left: 2px solid var(--accent);
+}
+.guide-block-warn { border-left-color: var(--amber, #EFA33D); }
+
+.guide-block-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.guide-block-warn .guide-block-head { color: var(--amber, #EFA33D); }
+
+.guide-block-text {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.guide-mistakes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.62;
+}
+.guide-mistakes > li {
+  position: relative;
+  padding-left: 14px;
+  color: var(--text);
+}
+/* 用短横线而不是圆点：这些条目本身是「A → B」的对照句式，
+   圆点会和句中的箭头打架 */
+.guide-mistakes > li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 6px;
+  height: 1.5px;
+  background: var(--text-faint);
+}
+
+/* 紧凑模式（训练页折叠区）里这两块收得更紧 */
+.guide-compact .guide-block { margin-top: 11px; padding: 10px 12px; }
+.guide-compact .guide-block-text,
+.guide-compact .guide-mistakes { font-size: 12.5px; }
+
+/* ============================================================
+   动作分解播放器
+   ============================================================
+   替代原来的原生 <img src="x.gif">。
+
+   背景必须和 .demo 的 --media-bg 一致：数据集素材是白底解剖线稿，
+   canvas 的透明区域如果透出深色界面，人形边缘会出现一圈黑边。 */
+:root {
+  /* 播放器画面区高度。详情页用默认值；
+     详情页的浮层高度要和它对齐，见 .demo .demo-overlay */
+  --player-stage-h: 236px;
+}
+
+.player {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 10px;
+}
+
+.player-stage {
+  position: relative;
+  /* 源图 180×180，这里给足够的显示尺寸。
+     高度提成变量：详情页的浮层高度要和它保持一致（见 .demo .demo-overlay） */
+  height: var(--player-stage-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--media-bg);
+  overflow: hidden;
+}
+.player-canvas {
+  /* image-rendering: auto 让它做平滑缩放。素材是像素画质不高的解剖图，
+     平滑缩放比 pixelated 更耐看；想逐像素比对时用户会用慢放而不是放大。 */
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.player-static { object-fit: contain; }
+.player-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.player-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #6B6B75;
+  background: var(--media-bg);
+}
+
+/* 帧序号角标：压在图右下角，让用户知道单步走到了第几帧 */
+.player-frame-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ---------- 控制条 ---------- */
+.player-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.player-buttons { display: flex; align-items: center; gap: 4px; }
+
+.player-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: var(--surface-2);
+  transition: color 0.15s, background 0.15s;
+}
+.player-btn:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
+.player-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+/* 播放/暂停是主操作，给强调色 */
+.player-btn-main {
+  width: 40px;
+  height: 40px;
+  color: #fff;
+  background: var(--accent);
+}
+.player-btn-main:hover:not(:disabled) { background: var(--accent-strong, var(--accent)); }
+
+.player-speeds {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.player-speed-icon { color: var(--text-faint); margin: 0 4px; }
+.player-speed {
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+.player-speed:hover { color: var(--text); }
+.player-speed.on { color: #fff; background: var(--accent); }
+
+/* ---------- 逐帧进度条 ---------- */
+.player-scrub { position: relative; height: 18px; display: flex; align-items: center; }
+.player-range {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  /* range 的原生轨道是灰的，这里压成全透明，让下面的 .player-progress 显色 */
+  background: transparent;
+}
+.player-progress {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  transition: width 0.08s linear;
+}
+
+/* ---------- 分步说明（可点，跳到对应画面） ---------- */
+.player-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  counter-reset: pstep;
+}
+.player-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.player-step:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
+.player-step.on {
+  color: var(--text);
+  background: var(--surface-3);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.player-step:disabled { cursor: default; opacity: 0.75; }
+
+.player-step-no {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+/* 当前步骤的序号圈反过来填充，让「正在看哪一步」一眼可见 */
+.player-step.on .player-step-no { background: var(--accent); color: #fff; }
+
+.player-step-text { flex: 1; min-width: 0; }
+.player-step-arrow { flex-shrink: 0; margin-top: 3px; color: var(--accent); }
+
 
 /* ============================================================
    编排页
@@ -1209,6 +1481,23 @@ a:hover { text-decoration: underline; }
   display: block;
 }
 .guided-demo-static { object-fit: contain; }
+
+/* 跟组训练里的播放器。
+   局部覆盖 --player-stage-h：这里空间要让给倒计时和输入框，
+   画面给 150px 够看清动作，再高就把倒计时挤出首屏了。 */
+.guided-player {
+  --player-stage-h: 150px;
+  margin-bottom: 14px;
+}
+.guided-player .player-stage {
+  border-radius: var(--radius);
+  border: 1px solid var(--media-border);
+  /* 圆角 + overflow:hidden 是必须的：canvas 是方的，不裁会顶破圆角 */
+  overflow: hidden;
+}
+/* 训练中不显示步骤列表（没传 steps，本来也不会有），
+   控制条收窄一点，别和倒计时抢注意力 */
+.guided-player .player-controls { justify-content: center; }
 
 .guided-name {
   font-size: 17px;
@@ -2210,12 +2499,15 @@ a:hover { text-decoration: underline; }
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     align-self: flex-end;
   }
-  .demo { max-height: 240px; }
+  /* 底部抽屉形态下，画面区收一点：整屏高度有限，
+     要给下面的控制条、步骤列表和「加入今日训练」按钮留出空间，
+     否则用户要滚动才够得着主操作。 */
+  :root { --player-stage-h: 200px; }
 
   .timer-ring { width: 200px; height: 200px; }
   .timer-number { font-size: 56px; }
   .guided-count { font-size: 48px; }
-  .guided-demo { width: 108px; height: 108px; }
+  .guided-player { --player-stage-h: 132px; }
   .modal-card { padding: 24px 18px; }
 
   .history-header { flex-direction: column; align-items: flex-start; gap: 4px; }
@@ -2236,6 +2528,14 @@ a:hover { text-decoration: underline; }
   .exercise-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
   .timer-ring { width: 176px; height: 176px; }
   .timer-number { font-size: 48px; }
+  /* 320–380 这一段，播放器控制条要能一行放下：缩小按钮和间距 */
+  .player-btn { width: 30px; height: 30px; }
+  .player-btn-main { width: 36px; height: 36px; }
+  .player-speed { padding: 4px 7px; font-size: 11px; }
+  .player-speed-icon { display: none; }
+  .player-step { font-size: 12.5px; padding: 8px 10px; }
+  :root { --player-stage-h: 180px; }
+  .guided-player { --player-stage-h: 120px; }
 }
 
 /* ---------- 横屏矮屏（手机转横）：垂直空间优先 ---------- */
@@ -2244,7 +2544,10 @@ a:hover { text-decoration: underline; }
   .timer-ring { width: 150px; height: 150px; margin-bottom: 12px; }
   .timer-number { font-size: 40px; }
   .guided-count { font-size: 36px; }
-  .demo { max-height: 160px; }
+  /* 横过来之后高度是最稀缺的资源，画面压到 140px，
+     控制条和步骤还能留在首屏内 */
+  :root { --player-stage-h: 140px; }
+  .guided-player { --player-stage-h: 120px; }
 }
 
 /* ---------- 触屏：去掉 hover 残留 ---------- */

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { X, Plus, Check, Home, Dumbbell, Star, Heart, Repeat, Timer, Route, Target } from 'lucide-react';
 import { gifPath, thumbPath, displayName, type ClassifiedExercise } from '../lib/store';
+import ExercisePlayer from './ExercisePlayer';
 import GuidePanel from './GuidePanel';
 
 interface Props {
@@ -28,8 +29,6 @@ export default function ExerciseDetail({
 }: Props) {
   const modalRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
-  /** GIF 加载失败时退回静态缩略图，不留白框 */
-  const [gifFailed, setGifFailed] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -87,7 +86,6 @@ export default function ExerciseDetail({
   const isHome = exercise.location === 'home';
   const gif = gifPath(exercise);
   const thumb = thumbPath(exercise);
-  const showGif = gif && !gifFailed;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -99,22 +97,20 @@ export default function ExerciseDetail({
         ref={modalRef}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 演示区。GIF 源图只有 180×180，所以这里不再拉成 1:1 大方块——
-            那样只会把小图放大到发虚，还留出大片空白。改为固定高度 + contain，
-            让动图以接近原始尺寸呈现，浮层控件压在图上。 */}
+        {/* 演示区。换成可交互的分解播放器（见 ExercisePlayer）——
+            原来的原生 <img src="x.gif"> 只能按 4fps 原速循环，看不清关节角度。
+            播放器把「步骤」和「画面帧」绑在一起：点第 3 步就跳到第 3 步对应的画面并停住，
+            配合慢放/逐帧，才算真的能"看清动作要领"。
+            浮层控件（标签、收藏、关闭）仍压在图上，所以播放器放在下层容器里。 */}
         <div className="demo">
-          {showGif ? (
-            <img
-              className="demo-media"
-              src={gif}
-              alt={`${zhName} 动作演示`}
-              onError={() => setGifFailed(true)}
+          <div className="demo-player-wrap">
+            <ExercisePlayer
+              gifSrc={gif}
+              thumbSrc={thumb}
+              alt={zhName}
+              steps={exercise.steps ?? []}
             />
-          ) : thumb ? (
-            <img className="demo-media demo-static" src={thumb} alt={`${zhName} 动作示意`} />
-          ) : (
-            <div className="demo-media demo-none">暂无演示</div>
-          )}
+          </div>
 
           <div className="demo-overlay">
             <div className="demo-tags">
@@ -187,7 +183,8 @@ export default function ExerciseDetail({
             </div>
           )}
 
-          <GuidePanel slug={exercise.slug} />
+          {/* 步骤已由上面的播放器以可点击的形式呈现，这里不再重复列一遍纯文本 */}
+          <GuidePanel slug={exercise.slug} stepsHandled />
 
           <div className="detail-actions">
             {alreadyAdded ? (

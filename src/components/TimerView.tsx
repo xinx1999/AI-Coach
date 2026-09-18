@@ -26,6 +26,7 @@ import {
 import { usePersistentState } from '../lib/persist';
 
 import type { TimerTab, WorkoutExercise, WorkoutSession } from '../lib/types';
+import ExercisePlayer from './ExercisePlayer';
 import GuidePanel from './GuidePanel';
 
 interface Props {
@@ -676,33 +677,30 @@ function GuidedTimer({
 }
 
 /**
- * 动作演示。
+ * 训练中的动作演示。
  *
- * 训练中抬手就能对照的「怎么动」参考，所以给 GIF 而不是静帧 ——
- * 这正是之前三张静态图最大的问题：动作本身是要看过程的，
- * 三张不连续的插画看不出先后顺序。
+ * 之前是 108px 的静态尺寸 GIF，原速 4fps 循环 —— 训练中正需要对照细节的时候
+ * 反而看不清，等于这块屏幕白占了。现在换成和详情页同一个播放器：
+ * 可暂停、可逐帧、可慢放，尺寸也给足。
+ *
+ * 这里**不传 steps**：训练中没耐心读 5～9 条文字，需要的是「怎么动」的画面。
+ * 步骤说明折叠在下面的「动作要领」里，想看再展开。
  */
 function ExerciseDemo({ slug }: { slug: string }) {
   const ex = getExercise(slug);
-  const [failed, setFailed] = useState(false);
   const gif = ex ? gifPath(ex) : null;
   const thumb = ex ? thumbPath(ex) : null;
 
-  if (gif && !failed) {
-    return (
-      <div className="guided-demo">
-        <img src={gif} alt="" onError={() => setFailed(true)} />
-      </div>
-    );
-  }
-  if (thumb) {
-    return (
-      <div className="guided-demo">
-        <img src={thumb} alt="" className="guided-demo-static" />
-      </div>
-    );
-  }
-  return null;
+  return (
+    <div className="guided-player">
+      <ExercisePlayer
+        gifSrc={gif}
+        thumbSrc={thumb}
+        alt={ex ? displayName(ex) : '动作'}
+        steps={[]}
+      />
+    </div>
+  );
 }
 
 // ============ 自由间歇 ============
