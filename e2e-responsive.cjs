@@ -11,11 +11,19 @@
  * document.scrollWidth 完全不变（0 溢出），文档级检查全绿，
  * 但用户在 320px 下根本看不到「浏览」按钮。必须量每个按钮的 getBoundingClientRect。
  *
- * 用法：先起 dev server（5173），再 node e2e-responsive.cjs
+ * 用法：
+ *   npm run dev                                    # 另开一个终端
+ *   node e2e-responsive.cjs                        # 测本地 dev（默认）
+ *   BASE=https://<用户>.github.io/<仓库> node e2e-responsive.cjs   # 测线上
+ *
+ * 线上也跑一遍是有意义的：本地 dev 不带 base 前缀，测不出子路径下的问题，
+ * 而 Pages 的 404 会让「按钮可点击」这类断言以完全不同的方式失败。
  */
+
 const { chromium } = require('playwright-core');
 
 const BASE = process.env.BASE || 'http://localhost:5173';
+const IS_REMOTE = /^https?:\/\/(?!localhost|127\.0\.0\.1)/.test(BASE);
 const EXECUTABLE =
   'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
 
@@ -46,6 +54,7 @@ function check(ok, label, extra = '') {
 
 (async () => {
   const browser = await chromium.launch({ executablePath: EXECUTABLE });
+  console.log(`\n目标: ${BASE}${IS_REMOTE ? '  (线上)' : '  (本地)'}`);
 
   for (const { w, name, iconOnly } of WIDTHS) {
     console.log(`\n▸ ${w}px (${name})`);
@@ -59,8 +68,10 @@ function check(ok, label, extra = '') {
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('response', (r) => { if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`); });
 
-    await page.goto(BASE, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(700);
+    // 线上要下 1324 张缩略图，networkidle 会等很久甚至超时；
+    // 放宽到 90s 并接受 domcontentloaded 之后的稳定态
+    await page.goto(BASE, { waitUntil: IS_REMOTE ? 'load' : 'networkidle', timeout: IS_REMOTE ? 90000 : 30000 });
+    await page.waitForTimeout(IS_REMOTE ? 2500 : 700);
 
     // 1) 每个导航按钮都必须在视口内
     const btns = await page.evaluate(() => {

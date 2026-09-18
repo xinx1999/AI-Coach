@@ -71,6 +71,15 @@ node audit-product.cjs                          # 另一个终端
 `e2e-responsive.cjs` 跑在 dev server（5173）上，其余大多数脚本跑在 preview（4199）上。
 `verify-live.cjs` 直接把线上地址写死在里面，改域名时记得同步。
 
+**三端适配既要在本地跑，也要在线上跑一遍**，因为本地 dev 不带 base 前缀，
+测不出子路径下的问题：
+
+```bash
+npm run dev                                                    # 另开终端
+node e2e-responsive.cjs                                        # 本地（默认 5173）
+BASE=https://<用户>.github.io/<仓库> node e2e-responsive.cjs    # 线上
+```
+
 这些脚本的**断言**是产品契约（取值口径、坐标映射、落点优先级、导航可达性），改了功能要同步改断言，
 而不是改断言迁就实现。
 
