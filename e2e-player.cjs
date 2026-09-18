@@ -23,8 +23,12 @@
  *      若哪天有人把 motionFrameIndices 去掉、改回原始帧序列，采样就会撞上
  *      500ms/1000ms 的定格，出现长串相同指纹，断言报警。
  *
- *   2. **放慢 2 倍仍在生效** —— 做法是**量帧切换间隔**：连续快速采样，
- *      统计「指纹变化」之间的时间差。原速是 100ms，放慢 2 倍应为 200ms。
+ *   2. **播放节奏仍是原速** —— 做法是**量帧切换间隔**：连续快速采样，
+ *      统计「指纹变化」之间的时间差。素材的运动帧是 100ms，原速下就是 ~100ms。
+ *
+ *      这条断言的价值在于「记录当前选择」：中间一度做成放慢 2 倍（200ms），
+ *      后来用户要求「再加快一点」，于是回到原速。断言随之收紧，
+ *      以后谁再把 SLOWDOWN 调离 1，这里会失败并逼他确认是不是有意的。
  *      这条断言的价值在于：把 SLOWDOWN 改回 1 或删掉，它会立刻失败。
  *
  * ## 端口约定
@@ -89,7 +93,10 @@ async function canvasFingerprint(page, selector) {
  * 不过是协议开销，跟动画速度毫无关系。
  *
  * 正确做法是把观测放进页面里：rAF 与渲染同频，时间戳来自同一个时钟，
- * 既没有协议开销，精度也高得多。量出来的间隔是干净的 200ms。
+ * 既没有协议开销，精度也高得多。
+ *
+ * 顺带说明：这个坑当时误导性特别强 —— 47ms 与「原速 100ms」同量级，
+ * 很容易顺势得出「哦原来本来就接近原速」的错觉。**读数不对时先怀疑测法。**
  */
 async function observeFrameChanges(page, selector, durationMs = 4000) {
   return page.evaluate(
@@ -210,18 +217,18 @@ async function observeFrameChanges(page, selector, durationMs = 4000) {
     [...new Set(stepTags)].join(',') || '(空)',
   );
 
-  // ---------- 4. 自动循环：画面推进 + 无定格 + 慢 2 倍 ----------
+  // ---------- 4. 自动循环：画面推进 + 无定格 + 原速 ----------
   /**
    * 在页面内观测 4 秒，同时验三件事 —— 它们是演示区仅剩的可观测性质：
    *
-   *   a) 画面在动          —— 出现多种不同画面
-   *   b) 没有定格帧漏网    —— 不出现异常长的一段静止
-   *   c) 节奏确实放慢了    —— 帧切换间隔 ≈ 200ms（原速 100ms × 2）
+   *   a) 画面在动        —— 出现多种不同画面
+   *   b) 没有定格帧漏网  —— 不出现异常长的一段静止
+   *   c) 节奏是原速      —— 帧切换间隔 ≈ 100ms
    *
-   * (c) 是这次新增的关键断言。它把 SLOWDOWN 从「一个写在代码里的数字」
-   * 变成「一个被测量过的行为」：改成 1 或删掉，间隔会掉回 ~100ms 并失败。
+   * (c) 把 SLOWDOWN 从「一个写在代码里的数字」变成「一个被测量过的行为」。
+   * 当前值是 1（用户要求「再加快一点」，从 2 倍放慢回到原速）。
    */
-  console.log('\n[3] 自动循环（无定格 + 放慢 2 倍）');
+  console.log('\n[3] 自动循环（无定格 + 原速）');
   const obs = await observeFrameChanges(page, '.player-canvas', 4000);
   check(!obs.err, '能在页面内观测画面变化', obs.err || '');
 
@@ -234,12 +241,11 @@ async function observeFrameChanges(page, selector, durationMs = 4000) {
   const gaps = changes.slice(1).map((c, i) => c.t - changes[i].t);
 
   /**
-   * 最长静止：rAF 与渲染同频（约 16.7ms 一次），所以一个 200ms 的帧
-   * 会被观测到约 12 次才切换。剔除干净且放慢后，最长静止应当就在
-   * 200ms 上下。若定格帧漏网，1000ms 的定格会被观测到约 60 次，
-   * 或间隔直接跳到 1000ms（×2 = 2000ms）。
+   * 最长静止：rAF 与渲染同频（约 16.7ms 一次），所以一个 100ms 的帧
+   * 会被观测到约 6 次才切换。原速 + 剔除定格后，最长静止应当就在
+   * 100ms 上下。若定格帧漏网，1000ms 的定格会让间隔直接跳到 1000ms。
    *
-   * 阈值 500ms：容得下一次重绘抖动，但拦得住漏网的定格。
+   * 阈值 500ms：容得下几次重绘抖动，但拦得住漏网的定格。
    */
   const maxGap = gaps.length > 0 ? Math.max(...gaps) : 0;
   check(
@@ -249,7 +255,7 @@ async function observeFrameChanges(page, selector, durationMs = 4000) {
   );
 
   /**
-   * 量帧间隔中位数。期望 200ms（100ms 原速 × 2 倍）。
+   * 量帧间隔中位数。素材的运动帧是 100ms，原速下期望 ≈100ms。
    *
    * 取**中位数**而不是平均值：开头第一帧可能因为解码 / 首绘而偏长，
    * 偶尔还会有 GC 抖动出一个离群值，平均值会被拉偏。
@@ -259,14 +265,17 @@ async function observeFrameChanges(page, selector, durationMs = 4000) {
   const medianGap = gaps.length > 0 ? gaps[Math.floor(gaps.length / 2)] : 0;
 
   /**
-   * 区间取 [150, 300]：
-   *   下限 150ms —— 排除「没放慢」（那会是 ~100ms）
-   *   上限 300ms —— 排除「放太慢」或掉帧（那会明显超过 200ms）
-   * 实测干净值是 200ms 左右，两侧都有 50ms 以上余量，不会误报。
+   * 区间取 [70, 160]：
+   *   下限 70ms  —— 排除掉帧 / 渲染跟不上（那会明显快于源帧时长）
+   *   上限 160ms —— 排除「又放慢了」（2 倍放慢会到 ~200ms）
+   * 干净值是 100ms 出头，两侧都有 30ms 以上余量。
+   *
+   * ⚠️ 改 SLOWDOWN 必须同步改这个区间，否则断言会以「速度不对」的名义
+   * 拦住一次有意的调整 —— 这正是它的作用：逼人确认改动是有意的。
    */
   check(
-    medianGap >= 150 && medianGap <= 300,
-    '播放速度确实放慢到约 2 倍（帧间隔 ≈200ms）',
+    medianGap >= 70 && medianGap <= 160,
+    '播放节奏是原速（帧间隔 ≈100ms）',
     `实测帧间隔中位数 ${medianGap}ms（${gaps.length} 次切换）`,
   );
 
@@ -410,7 +419,7 @@ async function observeFrameChanges(page, selector, durationMs = 4000) {
       });
       check(trainInteractive === 0, '训练页同样零交互', `可点元素 ${trainInteractive} 个`);
 
-      // 训练页也在自动循环，且同样放慢了（同用页面内观测，避免协议开销污染）
+      // 训练页也在自动循环，且同样原速（同用页面内观测，避免协议开销污染）
       const trainObs = await observeFrameChanges(page, '.guided-player .player-canvas', 3000);
       const trainChanges = trainObs.changes || [];
       const trainUniq = new Set(trainChanges.map((c) => c.hash)).size;
@@ -421,8 +430,8 @@ async function observeFrameChanges(page, selector, durationMs = 4000) {
       const trainMedian =
         trainGaps.length > 0 ? trainGaps[Math.floor(trainGaps.length / 2)] : 0;
       check(
-        trainMedian >= 150 && trainMedian <= 300,
-        '训练页同样放慢到约 2 倍',
+        trainMedian >= 70 && trainMedian <= 160,
+        '训练页同样保持原速',
         `帧间隔中位数 ${trainMedian}ms`,
       );
 
