@@ -1037,9 +1037,12 @@ a:hover { text-decoration: underline; }
 .guide-compact .guide-mistakes { font-size: 12.5px; }
 
 /* ============================================================
-   动作分解播放器
+   动作演示区
    ============================================================
-   替代原来的原生 <img src="x.gif">。
+   替代原来的原生 <img src="x.gif">：内部是自己解码 GIF 后逐帧重绘，
+   剔掉定格帧让动作连贯（见 src/lib/gifFrames.ts）。
+
+   刻意没有控制条 —— 自动循环即可，用户唯一的操作是点下面的步骤。
 
    背景必须和 .demo 的 --media-bg 一致：数据集素材是白底解剖线稿，
    canvas 的透明区域如果透出深色界面，人形边缘会出现一圈黑边。 */
@@ -1097,92 +1100,6 @@ a:hover { text-decoration: underline; }
   font-size: 12px;
   color: #6B6B75;
   background: var(--media-bg);
-}
-
-/* 帧序号角标：压在图右下角，让用户知道单步走到了第几帧 */
-.player-frame-badge {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-
-/* ---------- 控制条 ---------- */
-.player-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.player-buttons { display: flex; align-items: center; gap: 4px; }
-
-.player-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  background: var(--surface-2);
-  transition: color 0.15s, background 0.15s;
-}
-.player-btn:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
-.player-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-/* 播放/暂停是主操作，给强调色 */
-.player-btn-main {
-  width: 40px;
-  height: 40px;
-  color: #fff;
-  background: var(--accent);
-}
-.player-btn-main:hover:not(:disabled) { background: var(--accent-strong, var(--accent)); }
-
-.player-speeds {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-.player-speed-icon { color: var(--text-faint); margin: 0 4px; }
-.player-speed {
-  padding: 5px 9px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-  transition: color 0.15s, background 0.15s;
-}
-.player-speed:hover { color: var(--text); }
-.player-speed.on { color: #fff; background: var(--accent); }
-
-/* ---------- 逐帧进度条 ---------- */
-.player-scrub { position: relative; height: 18px; display: flex; align-items: center; }
-.player-range {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  /* range 的原生轨道是灰的，这里压成全透明，让下面的 .player-progress 显色 */
-  background: transparent;
-}
-.player-progress {
-  position: absolute;
-  left: 0;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--accent);
-  pointer-events: none;
-  transition: width 0.08s linear;
 }
 
 /* ---------- 分步说明（可点，跳到对应画面） ---------- */
@@ -1495,9 +1412,6 @@ a:hover { text-decoration: underline; }
   /* 圆角 + overflow:hidden 是必须的：canvas 是方的，不裁会顶破圆角 */
   overflow: hidden;
 }
-/* 训练中不显示步骤列表（没传 steps，本来也不会有），
-   控制条收窄一点，别和倒计时抢注意力 */
-.guided-player .player-controls { justify-content: center; }
 
 .guided-name {
   font-size: 17px;
@@ -2528,11 +2442,7 @@ a:hover { text-decoration: underline; }
   .exercise-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
   .timer-ring { width: 176px; height: 176px; }
   .timer-number { font-size: 48px; }
-  /* 320–380 这一段，播放器控制条要能一行放下：缩小按钮和间距 */
-  .player-btn { width: 30px; height: 30px; }
-  .player-btn-main { width: 36px; height: 36px; }
-  .player-speed { padding: 4px 7px; font-size: 11px; }
-  .player-speed-icon { display: none; }
+  /* 320–380 这一段空间最紧，步骤条目再收一点 */
   .player-step { font-size: 12.5px; padding: 8px 10px; }
   :root { --player-stage-h: 180px; }
   .guided-player { --player-stage-h: 120px; }
