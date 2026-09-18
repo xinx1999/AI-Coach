@@ -97,10 +97,8 @@ export default function ExerciseDetail({
         ref={modalRef}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 演示区。换成可交互的分解播放器（见 ExercisePlayer）——
-            原来的原生 <img src="x.gif"> 只能按 4fps 原速循环，看不清关节角度。
-            播放器把「步骤」和「画面帧」绑在一起：点第 3 步就跳到第 3 步对应的画面并停住，
-            配合慢放/逐帧，才算真的能"看清动作要领"。
+        {/* 演示区。见 ExercisePlayer —— 剔掉定格帧 + 整体放慢 2 倍。
+            刻意是零交互的：没有控制条，步骤列表也不可点。
             浮层控件（标签、收藏、关闭）仍压在图上，所以播放器放在下层容器里。 */}
         <div className="demo">
           <div className="demo-player-wrap">

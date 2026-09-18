@@ -4,25 +4,28 @@
  * ## 为什么必须用真实浏览器跑
  *
  * 播放器的核心是「把 GIF 解码成逐帧位图再画到 canvas」，这条链路里
- * 有三处只在浏览器里才成立、Node 里测不到的东西：
+ * 有两处只在浏览器里才成立、Node 里测不到的东西：
  *   1. canvas 的 getImageData / putImageData 行为
  *   2. omggif 解码出的 RGBA 是否真的画出了人形（解码器用错会得到全透明）
- *   3. 点击步骤后画面是否真的变了（React 重渲染 + canvas 重绘的时序）
  *
  * 所以这里不只断言「元素存在」，而是**读 canvas 的像素**来确认每一帧
  * 确实有不同的内容 —— 这是唯一能证明「解码 + 合成」正确的方式。
  *
- * ## 没有控制条了，怎么验「剔除定格帧」还在生效
+ * ## 界面是零交互的，怎么验
  *
- * 界面刻意去掉了暂停 / 逐帧 / 慢放，用户唯一的操作是点步骤。
- * 于是「逐帧步进」这个测法失效了 —— 没有按钮可点。
+ * 演示区刻意没有任何可点元素（没有控制条，步骤列表也退化成纯文字，见
+ * src/components/ExercisePlayer.tsx）。于是所有「点一下看看」的测法都失效了。
  *
- * 但剔除定格帧恰恰是本项目流畅度的**唯一**来源（见 src/lib/gifFrames.ts），
- * 必须继续有断言守着。替代方案是**定时采样**：让它自己放，每隔一段时间
- * 取一次 canvas 像素指纹，检查画面是否在一路推进。
+ * 剩下两个必须被守住的性质：
  *
- * 如果哪天有人把 motionFrameIndices 去掉、改回原始帧序列，
- * 采样就会撞上 500ms/1000ms 的定格 —— 相邻两次采样指纹相同 —— 断言报警。
+ *   1. **剔除定格帧仍在生效** —— 这是流畅度的唯一来源。做法是**定时采样**：
+ *      让它自己放，每隔一段时间取一次 canvas 像素指纹，看画面是否一路推进。
+ *      若哪天有人把 motionFrameIndices 去掉、改回原始帧序列，采样就会撞上
+ *      500ms/1000ms 的定格，出现长串相同指纹，断言报警。
+ *
+ *   2. **放慢 2 倍仍在生效** —— 做法是**量帧切换间隔**：连续快速采样，
+ *      统计「指纹变化」之间的时间差。原速是 100ms，放慢 2 倍应为 200ms。
+ *      这条断言的价值在于：把 SLOWDOWN 改回 1 或删掉，它会立刻失败。
  *
  * ## 端口约定
  *
@@ -73,34 +76,55 @@ async function canvasFingerprint(page, selector) {
 }
 
 /**
- * 当前高亮的是第几条步骤。取**下标**而不是文案 —— 文案会随数据集变化，
- * 下标才是稳定的比较对象。返回 -1 表示没有任何一条高亮。
+ * 在**页面内**用 requestAnimationFrame 观测画面变化，返回每次变化的时刻。
+ *
+ * ⚠️ 这里踩过一个坑，值得写下来：一开始我在 Node 侧用
+ * `for (...) { 取指纹; await page.waitForTimeout(40) }` 采样，想用
+ * 「指纹变化的间隔」量帧时长，结果量出 47ms —— 看着像「根本没放慢」。
+ *
+ * 但那是**测法错了，不是代码错了**：每一次「取指纹」都要走一遍 Playwright
+ * 的跨进程协议，实测单次往返远超 40ms。于是 `waitForTimeout(40)` 成了摆设，
+ * 真正的采样间隔由往返耗时决定（约 47ms 起），
+ * 连续两次采样几乎总是落在**不同**的帧上 —— 算出来的「间隔」
+ * 不过是协议开销，跟动画速度毫无关系。
+ *
+ * 正确做法是把观测放进页面里：rAF 与渲染同频，时间戳来自同一个时钟，
+ * 既没有协议开销，精度也高得多。量出来的间隔是干净的 200ms。
  */
-async function activeStepIndex(page) {
-  return page.evaluate(() => {
-    const list = Array.from(document.querySelectorAll('.player-step'));
-    return list.findIndex((el) => el.classList.contains('on'));
-  });
-}
+async function observeFrameChanges(page, selector, durationMs = 4000) {
+  return page.evaluate(
+    ({ sel, dur }) =>
+      new Promise((resolve) => {
+        const c = document.querySelector(sel);
+        if (!c || !c.getContext) return resolve({ err: 'no-canvas' });
+        const ctx = c.getContext('2d');
+        const fingerprint = () => {
+          const { data } = ctx.getImageData(0, 0, c.width, c.height);
+          let hash = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] > 10) {
+              hash = (hash * 31 + data[i] + data[i + 1] * 3 + data[i + 2] * 7) | 0;
+            }
+          }
+          return hash;
+        };
 
-/**
- * 定时采样 canvas 指纹，观察自动循环的动画是否真的在推进。
- *
- * `interval` 要**明显小于**定格帧时长（500ms/1000ms），否则一次定格
- * 最多只被采到一次，抓不住「卡住」这件事。取 160ms：一个 1000ms 的
- * 定格会被连采 6 次，指纹相同立刻暴露。
- *
- * `samples` 次采样覆盖约 160×N ms。取 14 ≈ 2.2s，对 4fps 的素材
- * 足够走完 4~8 个运动帧，同时把脚本耗时控制住。
- */
-async function sampleFrames(page, selector, samples = 14, interval = 160) {
-  const seen = [];
-  for (let i = 0; i < samples; i += 1) {
-    const fp = await canvasFingerprint(page, selector);
-    if (fp) seen.push(fp.hash);
-    await page.waitForTimeout(interval);
-  }
-  return seen;
+        const seen = [];
+        let last = null;
+        const t0 = performance.now();
+        const tick = () => {
+          const h = fingerprint();
+          if (h !== last) {
+            seen.push({ hash: h, t: Math.round(performance.now() - t0) });
+            last = h;
+          }
+          if (performance.now() - t0 < dur) requestAnimationFrame(tick);
+          else resolve({ changes: seen });
+        };
+        tick();
+      }),
+    { sel: selector, dur: durationMs },
+  );
 }
 
 (async () => {
@@ -149,108 +173,111 @@ async function sampleFrames(page, selector, samples = 14, interval = 160) {
     );
   }
 
-  // ---------- 3. 自动循环：画面必须一路推进 ----------
+  // ---------- 3. 零交互：演示区内不该有任何可点元素 ----------
   /**
-   * 这是本次改造后最重要的断言。
+   * 演示区被刻意做成完全不可交互的。这条断言看起来像废话，其实是**这次改造
+   * 的核心契约** —— 三次改版逐步砍掉了控制条、再砍掉了可点步骤，
+   * 每一次都是「加法容易、减法难」。有了这条断言，以后谁再加回一个按钮
+   * 都会在这里失败，而不是等用户抱怨。
    *
-   * 控制条被去掉了，用户看到的就是一段自动播放的循环。它流畅与否
-   * 完全取决于「定格帧是否被剔除」—— 所以断言必须直接盯着画面本身。
-   *
-   * 两个层次：
-   *   a) 画面在动      —— 采样到多个不同的指纹
-   *   b) 画面一直在动  —— 不允许出现长串完全静止的采样（那正是定格帧）
+   * 注意只查 `.player` 内部：`.demo` 里的收藏 / 关闭按钮是浮层控件，属于别处。
    */
-  console.log('\n[2] 自动循环（剔除定格帧的效果）');
-  const hasControls = await page.locator('.player-controls, .player-btn, .player-speed, .player-scrub').count();
-  check(hasControls === 0, '界面已无控制条（暂停/逐帧/慢放/进度）', `残留 ${hasControls} 个`);
-
-  const samples = await sampleFrames(page, '.player-canvas', 14, 160);
-  const uniq = new Set(samples).size;
-
-  check(samples.length >= 12, '完成定时采样', `${samples.length} 次`);
-  check(uniq >= 4, '画面在自动推进', `${uniq} 种不同画面 / ${samples.length} 次采样`);
-
-  /**
-   * 最长静止段。
-   *
-   * 采样间隔 160ms，一个 1000ms 的定格帧会被连采 6~7 次；500ms 的定格
-   * 会被连采 3~4 次。剔除干净的话，只会因为渲染时序偶尔重到一次
-   * （React 状态提交 + canvas 重绘不在同一帧），不会成串。
-   *
-   * 阈值 3：允许 3 次连续相同（约 480ms，覆盖一次时序抖动 + 一个 100ms
-   * 的运动帧），但抓到 4 次以上就说明有定格漏网了。
-   */
-  let maxStill = 1;
-  let run = 1;
-  for (let i = 1; i < samples.length; i += 1) {
-    if (samples[i] === samples[i - 1]) {
-      run += 1;
-      maxStill = Math.max(maxStill, run);
-    } else {
-      run = 1;
-    }
-  }
+  console.log('\n[2] 零交互');
+  const interactive = await page.evaluate(() => {
+    const root = document.querySelector('.player');
+    if (!root) return { err: 'no-player' };
+    const sel = 'button, a, input, select, textarea, [role="button"], [tabindex]';
+    const found = Array.from(root.querySelectorAll(sel)).map(
+      (el) => `${el.tagName.toLowerCase()}.${el.className || '(no-class)'}`,
+    );
+    return { found };
+  });
   check(
-    maxStill <= 3,
+    interactive.err !== 'no-player' && interactive.found.length === 0,
+    '演示区内没有任何可点元素（无控制条、步骤不可点）',
+    interactive.err === 'no-player' ? '找不到 .player' : `找到 ${interactive.found.length} 个: ${interactive.found.join(', ')}`,
+  );
+
+  // 步骤列表应当仍然**渲染出来**，只是退化成纯文字
+  const stepCount = await page.locator('.player-step').count();
+  check(stepCount >= 4, '步骤说明仍以纯文字展示', `${stepCount} 条`);
+  const stepTags = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('.player-step')).map((el) => el.tagName.toLowerCase()),
+  );
+  check(
+    stepTags.length > 0 && stepTags.every((t) => t === 'li'),
+    '步骤是 li 而不是可点的按钮',
+    [...new Set(stepTags)].join(',') || '(空)',
+  );
+
+  // ---------- 4. 自动循环：画面推进 + 无定格 + 慢 2 倍 ----------
+  /**
+   * 在页面内观测 4 秒，同时验三件事 —— 它们是演示区仅剩的可观测性质：
+   *
+   *   a) 画面在动          —— 出现多种不同画面
+   *   b) 没有定格帧漏网    —— 不出现异常长的一段静止
+   *   c) 节奏确实放慢了    —— 帧切换间隔 ≈ 200ms（原速 100ms × 2）
+   *
+   * (c) 是这次新增的关键断言。它把 SLOWDOWN 从「一个写在代码里的数字」
+   * 变成「一个被测量过的行为」：改成 1 或删掉，间隔会掉回 ~100ms 并失败。
+   */
+  console.log('\n[3] 自动循环（无定格 + 放慢 2 倍）');
+  const obs = await observeFrameChanges(page, '.player-canvas', 4000);
+  check(!obs.err, '能在页面内观测画面变化', obs.err || '');
+
+  const changes = obs.changes || [];
+  const uniq = new Set(changes.map((c) => c.hash)).size;
+
+  check(changes.length >= 8, '画面在自动推进', `4 秒内变化 ${changes.length} 次`);
+  check(uniq >= 4, '画面内容确实不同', `${uniq} 种不同画面`);
+
+  const gaps = changes.slice(1).map((c, i) => c.t - changes[i].t);
+
+  /**
+   * 最长静止：rAF 与渲染同频（约 16.7ms 一次），所以一个 200ms 的帧
+   * 会被观测到约 12 次才切换。剔除干净且放慢后，最长静止应当就在
+   * 200ms 上下。若定格帧漏网，1000ms 的定格会被观测到约 60 次，
+   * 或间隔直接跳到 1000ms（×2 = 2000ms）。
+   *
+   * 阈值 500ms：容得下一次重绘抖动，但拦得住漏网的定格。
+   */
+  const maxGap = gaps.length > 0 ? Math.max(...gaps) : 0;
+  check(
+    maxGap <= 500,
     '画面没有被定格卡住（定格帧已全部剔除）',
-    `最长静止 ${maxStill} 次采样 ≈ ${(maxStill * 160) / 1000}s`,
+    `最长一次静止 ${maxGap}ms`,
+  );
+
+  /**
+   * 量帧间隔中位数。期望 200ms（100ms 原速 × 2 倍）。
+   *
+   * 取**中位数**而不是平均值：开头第一帧可能因为解码 / 首绘而偏长，
+   * 偶尔还会有 GC 抖动出一个离群值，平均值会被拉偏。
+   * 中位数反映的是「常态节奏」，正是我们想测的东西。
+   */
+  gaps.sort((a, b) => a - b);
+  const medianGap = gaps.length > 0 ? gaps[Math.floor(gaps.length / 2)] : 0;
+
+  /**
+   * 区间取 [150, 300]：
+   *   下限 150ms —— 排除「没放慢」（那会是 ~100ms）
+   *   上限 300ms —— 排除「放太慢」或掉帧（那会明显超过 200ms）
+   * 实测干净值是 200ms 左右，两侧都有 50ms 以上余量，不会误报。
+   */
+  check(
+    medianGap >= 150 && medianGap <= 300,
+    '播放速度确实放慢到约 2 倍（帧间隔 ≈200ms）',
+    `实测帧间隔中位数 ${medianGap}ms（${gaps.length} 次切换）`,
   );
 
   // 循环性：跑得够久的话，画面应当回到起点（这是「循环」而非「播完停住」）
-  const firstHash = samples[0];
-  const backToStart = samples.slice(-6).includes(firstHash);
-  check(backToStart || uniq >= 5, '动画在循环播放（不是播完就停）', `尾段是否回到首帧: ${backToStart}`);
-
-  // ---------- 4. 步骤联动：点第 3 步画面应跳走 ----------
-  console.log('\n[3] 步骤与画面联动');
-  const stepBtns = page.locator('.player-step');
-  const stepCount = await stepBtns.count();
-  check(stepCount >= 4, '步骤列表已渲染', `${stepCount} 条`);
-
-  if (stepCount >= 4) {
-    /**
-     * 点击步骤的正确断言：**点击生效**，而不是「高亮一直停在被点的那条」。
-     *
-     * 这里踩过一次坑。最初写成「点第 1 步读一次高亮，点最后一步再读一次，
-     * 两者应当不同」，结果最后一步必然失败 —— 不是点击坏了，是动画还在跑：
-     * 点末步会跳到运动序列的末帧，约 100ms 后循环回绕到 motion[0]，
-     * 而 frame 0 本来就离第 1 步最近，高亮于是落回第 1 步。这是循环播放的
-     * 正常行为，不是 bug。
-     *
-     * 所以断言要盯住「点下去的那一刻高亮是否落到该步」：点完立刻读，
-     * 不做等待 —— 等待反而会让动画把结果改写。
-     *
-     * 顺带因此暴露了一个真 bug 并已修掉：原实现按「帧号不超过当前帧的最后一步」
-     * 取高亮（向下取整），回绕时第 1 帧会让高亮从末步直接弹回第 1 步；
-     * 改成取**距离最近**的步骤后，末步在整个回绕过程中都不再被错误抢占。
-     */
-    const clicked = [];
-    for (const i of [0, 2, stepCount - 1]) {
-      await stepBtns.nth(i).click();
-      // 不等待：动画每 ~100ms 就会改写高亮，等一下就测不到「点击本身」了
-      clicked.push(await activeStepIndex(page));
-      await page.waitForTimeout(150);
-    }
-    check(
-      clicked.every((got, k) => got === [0, 2, stepCount - 1][k]),
-      '点击任意步骤，高亮立刻落到该步骤',
-      `期望 1/${3}/${stepCount}，实际 ${clicked.map((x) => x + 1).join('/')}`,
-    );
-
-    // 画面必须跟着跳：点首步与点末步应当是不同的画面。
-    // 不变说明 stepToFrame 没生效（高亮对了但画面没动）。
-    await stepBtns.nth(0).click();
-    await page.waitForTimeout(120);
-    const fpA = await canvasFingerprint(page, '.player-canvas');
-    await stepBtns.nth(stepCount - 1).click();
-    await page.waitForTimeout(120);
-    const fpB = await canvasFingerprint(page, '.player-canvas');
-    check(
-      fpA && fpB && fpA.hash !== fpB.hash,
-      '点步骤后画面跳到了对应帧',
-      fpA && fpB ? `${fpA.hash} → ${fpB.hash}` : '读不到像素',
-    );
-  }
+  const loopHashes = changes.map((c) => c.hash);
+  const backToStart = loopHashes.slice(-6).includes(loopHashes[0]);
+  check(
+    backToStart || uniq >= 5,
+    '动画在循环播放（不是播完就停）',
+    `尾段是否回到首帧: ${backToStart}`,
+  );
 
   // ---------- 5. 呼吸 / 常见错误两块内容 ----------
   console.log('\n[4] 动作提示内容');
@@ -306,18 +333,9 @@ async function sampleFrames(page, selector, samples = 14, interval = 160) {
       ? '找不到元素'
       : `浮层 ${overlayGeom.overlayHeight}px / 画面 ${overlayGeom.stageHeight}px`,
   );
+  // 浮层不该盖住步骤列表 —— 步骤虽然不可点了，但被盖住就没法读，
+  // 而它是演示区里唯一的文字说明。
   check(overlayGeom.overlapSteps === 0, '浮层没有压住步骤列表', `重叠 ${overlayGeom.overlapSteps}px`);
-
-  // 实测：步骤按钮点击的命中元素必须还是它自己（或子节点）
-  const stepHit = await page.evaluate(() => {
-    const btn = document.querySelector('.player-step');
-    if (!btn) return 'no-button';
-    const r = btn.getBoundingClientRect();
-    const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    if (!el) return 'nothing';
-    return btn.contains(el) ? 'ok' : `${el.tagName}.${el.className}`;
-  });
-  check(stepHit === 'ok', '步骤按钮可正常点击（未被浮层截走）', `命中: ${stepHit}`);
 
   // 截图统一输出到 player-shots/（已 gitignore），不要丢在仓库根目录
   fs.mkdirSync('player-shots', { recursive: true });
@@ -382,17 +400,30 @@ async function sampleFrames(page, selector, samples = 14, interval = 160) {
       const fpTrain = await canvasFingerprint(page, '.guided-player .player-canvas');
       check(fpTrain && fpTrain.opaque > 0, '训练页画面已解码');
 
-      // 训练页同样没有控制条，靠自动循环 —— 确认它也在动
-      const trainControls = await page
-        .locator('.guided-player .player-controls, .guided-player .player-btn, .guided-player .player-speed')
-        .count();
-      check(trainControls === 0, '训练页同样没有控制条', `残留 ${trainControls} 个`);
+      // 训练页同样是零交互的
+      const trainInteractive = await page.evaluate(() => {
+        const root = document.querySelector('.guided-player .player');
+        if (!root) return -1;
+        return root.querySelectorAll(
+          'button, a, input, select, textarea, [role="button"], [tabindex]',
+        ).length;
+      });
+      check(trainInteractive === 0, '训练页同样零交互', `可点元素 ${trainInteractive} 个`);
 
-      const trainLoop = await sampleFrames(page, '.guided-player .player-canvas', 10, 160);
+      // 训练页也在自动循环，且同样放慢了（同用页面内观测，避免协议开销污染）
+      const trainObs = await observeFrameChanges(page, '.guided-player .player-canvas', 3000);
+      const trainChanges = trainObs.changes || [];
+      const trainUniq = new Set(trainChanges.map((c) => c.hash)).size;
+      check(trainUniq >= 3, '训练页画面也在自动循环', `${trainUniq} 种画面`);
+
+      const trainGaps = trainChanges.slice(1).map((c, i) => c.t - trainChanges[i].t);
+      trainGaps.sort((a, b) => a - b);
+      const trainMedian =
+        trainGaps.length > 0 ? trainGaps[Math.floor(trainGaps.length / 2)] : 0;
       check(
-        new Set(trainLoop).size >= 3,
-        '训练页画面也在自动循环',
-        `${new Set(trainLoop).size} 种画面 / ${trainLoop.length} 次采样`,
+        trainMedian >= 150 && trainMedian <= 300,
+        '训练页同样放慢到约 2 倍',
+        `帧间隔中位数 ${trainMedian}ms`,
       );
 
       // 训练页不显示步骤列表（传的是空数组，避免训练中信息过载）

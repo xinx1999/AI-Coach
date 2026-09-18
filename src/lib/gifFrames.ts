@@ -163,25 +163,3 @@ export function motionFrameIndices(frames: GifFrame[]): number[] {
   return moving.length > 0 ? moving : all;
 }
 
-/**
- * 步骤 ↔ 帧 的对齐。
- *
- * 数据集的「步骤数」和「帧数」并不相等（比如 5 条步骤配 10 个运动帧），
- * 但两者都在描述同一件事的先后顺序，所以按比例对齐：
- * 第 k 条步骤（0-based，共 N 条）对应运动帧序列里的第 round(k*(M-1)/(N-1)) 个。
- *
- * 传入的是 `motionFrameIndices` 的结果而不是总帧数 ——
- * 这样步骤只会落在运动帧上。若把首步对到开头的定格帧、末步对到收尾的定格帧，
- * 用户点第一步和最后一步看到的都是静止画面，会以为功能坏了。
- *
- * @param motion 运动帧的下标序列
- */
-export function stepToFrame(stepIndex: number, stepCount: number, motion: number[]): number {
-  if (motion.length === 0) return 0;
-  if (stepCount <= 1) return motion[0];
-  const ratio = stepIndex / (stepCount - 1);
-  const idx = Math.round(ratio * (motion.length - 1));
-  // 夹紧下标，防御调用方传入越界的 stepIndex
-  return motion[Math.min(motion.length - 1, Math.max(0, idx))];
-}
-

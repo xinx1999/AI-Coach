@@ -5,25 +5,31 @@
  *
  * 上游动图是「定格 1 秒 → 连放 5 张 100ms」的 4fps 循环（见 lib/gifFrames.ts 顶部注释），
  * 原速播出来就是「动一下、停半秒、动一下」，用户看不清关节角度和下放幅度。
- * 数据集自带的 5～9 条分步说明又只是被动地堆在图下面，
- * 文字讲第 3 步时画面可能正停在定格帧上 —— 两者对不上，等于没有。
  *
  * ## 这里怎么解决
  *
- * 1. **剔掉定格帧**，只循环运动帧序列，动作因此是连贯的（核心，见 gifFrames.ts）；
- * 2. **步骤列表可点**，点第 k 步画面直接跳到对应帧，同时自动播放时反向高亮当前步骤 ——
- *    文字和画面终于对上了。
+ * 两件事，缺一不可：
  *
- * ## 为什么没有播放控制
+ * 1. **剔掉定格帧**，只循环运动帧序列 —— 这是「动一下卡一下」的根因，
+ *    不剔掉的话，放得再慢也只是一顿一顿地慢（见 gifFrames.ts）；
+ * 2. **整体放慢 SLOWDOWN 倍** —— 运动帧之间从 100ms 拉长到 200ms。
+ *    200ms 是能看清关节角度、又不会显得拖沓的节奏。
  *
- * 做过一版带暂停 / 逐帧 / 慢放 / 进度条 / 速度档的播放器，但被否掉了：
- * 用户要的是「打开就看到动作在动、且看得懂」，不是「能操控」。
- * 一堆控件占掉了画面下方的空间，反而是负担。
- * 慢放的价值已经由「剔除定格帧 + 只循环运动段」替代 —— 那才是让动作变连贯的关键，
- * 跟有没有控制条无关。
+ * 注意顺序：**先剔除、后放慢**。反过来的话定格帧也会被一起拉长，
+ * 一个 1 秒的定格会变成 2 秒，比不放慢更难受。
  *
- * 所以这里刻意保持安静：自动循环、不打断、不需要操作。
- * 唯一保留的交互是「点步骤跳画面」，因为它解决的是「看不懂」而不是「不好用」。
+ * ## 为什么不联动步骤
+ *
+ * 做过三版，逐步收敛：
+ *   1. 带暂停 / 逐帧 / 慢放 / 进度条 / 速度档的完整播放器 —— 否掉了，
+ *      用户要的是「打开就看到动作在动」，不是「能操控」，一排控件是负担；
+ *   2. 自动循环 + **可点**步骤列表（点第 k 步跳画面 + 反向高亮）—— 也否掉了。
+ *      用户明确说「步骤 ↔ 画面对齐也不要了」。跳帧打断了连续观察，
+ *      而且文字和帧的对应关系本来就不精确，硬绑反而让人分心；
+ *   3. 现在这样：动图自己慢慢循环，下面单纯列出步骤文字。
+ *
+ * 所以这里刻意保持安静至极：**零交互**。不打断、不需要操作、没有可点元素。
+ * 步骤列表退化成纯文字说明 —— 它和画面各自讲同一件事，不互相牵制。
  *
  * ## 降级
  *
@@ -31,9 +37,23 @@
  * 宁可少一个功能，也不能留一块空白或者让动效惹人烦。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
-import { decodeGif, motionFrameIndices, stepToFrame, type DecodedGif } from '../lib/gifFrames';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { decodeGif, motionFrameIndices, type DecodedGif } from '../lib/gifFrames';
+
+/**
+ * 播放时长的放慢倍数。
+ *
+ * 2 倍 = 运动帧间隔从 100ms 拉到 200ms（5fps）。
+ * 为什么是 2 而不是更大：素材总共只有 5～9 个运动帧，再慢就像卡住了；
+ * 2 倍刚好让人看清起止姿态，又不至于等得不耐烦。
+ */
+const SLOWDOWN = 2;
+
+/**
+ * 单帧时长下限。放慢后仍不接受低于此值的帧 ——
+ * 极短的帧在慢速播放里会一闪而过，还不如并入相邻帧。
+ */
+const MIN_FRAME_MS = 60;
 
 interface Props {
   /** 动图地址；为空表示这个动作没有演示素材 */
@@ -42,7 +62,7 @@ interface Props {
   thumbSrc: string | null;
   /** 无障碍描述 */
   alt: string;
-  /** 数据集自带的中文分步说明 */
+  /** 数据集自带的中文分步说明。仅作文字展示，不与画面联动 */
   steps: string[];
 }
 
@@ -61,8 +81,6 @@ export default function ExercisePlayer({ gifSrc, thumbSrc, alt, steps }: Props) 
   const [gif, setGif] = useState<DecodedGif | null>(null);
   /** 当前画到第几帧（真实帧号，不是运动序列下标） */
   const [frame, setFrame] = useState(0);
-  /** 当前高亮的步骤。null = 还没开始跟 */
-  const [activeStep, setActiveStep] = useState<number | null>(null);
 
   const reducedMotion = useMemo(prefersReducedMotion, []);
 
@@ -71,7 +89,7 @@ export default function ExercisePlayer({ gifSrc, thumbSrc, alt, steps }: Props) 
    *
    * 数据集每个循环里夹着 1～3 处长定格（1000ms / 500ms），原速播过去就是
    * 「动一下卡一下」。这里把它们剔掉，只留连续运动的帧 ——
-   * 播放和步骤映射都基于这个序列，所以看到的动作是连贯的。
+   * 播放基于这个序列，所以看到的动作是连贯的。
    *
    * 与 gif 一起在解码时确定，不单独用 memo 推导：
    * 它只是解码结果的函数，分开算容易出现「gif 已换、序列还是旧的」这种错位。
@@ -122,7 +140,7 @@ export default function ExercisePlayer({ gifSrc, thumbSrc, alt, steps }: Props) 
     ctx.putImageData(gif.frames[frame].imageData, 0, 0);
   }, [gif, frame]);
 
-  // ---------- 自动循环 ----------
+  // ---------- 自动循环（放慢 SLOWDOWN 倍） ----------
   useEffect(() => {
     // 用户开了「减少动态效果」就不播 —— 尊重这个偏好比展示动画重要
     if (reducedMotion || status !== 'ready' || !gif) return;
@@ -131,7 +149,8 @@ export default function ExercisePlayer({ gifSrc, thumbSrc, alt, steps }: Props) 
     // 每帧时长不同，间隔必须每帧重算。
     let timer: number;
     const tick = () => {
-      const waitMs = gif.frames[frame].durationMs;
+      const base = gif.frames[frame].durationMs;
+      const waitMs = Math.max(MIN_FRAME_MS, base * SLOWDOWN);
       timer = window.setTimeout(() => {
         setFrame((f) => {
           // 在**运动帧序列**里前进一格，而不是帧号 +1。
@@ -146,40 +165,6 @@ export default function ExercisePlayer({ gifSrc, thumbSrc, alt, steps }: Props) 
 
     return () => window.clearTimeout(timer);
   }, [reducedMotion, status, gif, frame, motion]);
-
-  /** 点步骤：跳到该步骤对应的帧。这正是「看清动作」的关键 ——
-   *  文字和画面终于对上了，而不是各说各的。 */
-  const goToStep = useCallback(
-    (index: number) => {
-      if (!gif) return;
-      setActiveStep(index);
-      setFrame(stepToFrame(index, steps.length, motion));
-    },
-    [gif, steps.length, motion],
-  );
-
-  /**
-   * 播放时反向高亮步骤：画面走到哪一帧，就点亮对应的那条说明。
-   *
-   * 取**最近的**步骤，而不是「帧号不超过当前帧的最后一步」（向下取整）。
-   * 向下取整在循环回绕处会出错：点最后一步会跳到运动序列的末帧，
-   * 下一拍自动播放把它推回 motion[0]，此时「不超过第 0 帧的最后一步」
-   * 就是第 1 步 —— 高亮在 100ms 内从最后一步弹回第一步，看着像点击失效。
-   * 按距离最近来选，回绕前后都稳定落在同一侧。
-   */
-  useEffect(() => {
-    if (status !== 'ready' || !gif || steps.length === 0) return;
-    let best = 0;
-    let bestDist = Infinity;
-    for (let i = 0; i < steps.length; i += 1) {
-      const dist = Math.abs(stepToFrame(i, steps.length, motion) - frame);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = i;
-      }
-    }
-    setActiveStep(best);
-  }, [status, frame, gif, steps.length, motion]);
 
   const showCanvas = status === 'ready' && gif;
 
@@ -206,24 +191,15 @@ export default function ExercisePlayer({ gifSrc, thumbSrc, alt, steps }: Props) 
         {status === 'loading' && <div className="player-loading">正在加载演示…</div>}
       </div>
 
-      {/* 分步说明。点一条就跳到对应画面 —— 这是「看懂动作」的关键。
-          没有控制条，用户唯一的操作就是这里。 */}
+      {/* 分步说明。纯文字，**不可点** —— 点击跳帧会打断连续观察，
+          而且文字和帧本来就不是精确对应的，硬绑反而分心。
+          它只是把数据集的说明列出来，和画面各讲各的同一件事。 */}
       {steps.length > 0 && (
         <ol className="player-steps">
           {steps.map((s, i) => (
-            <li key={i}>
-              <button
-                className={`player-step ${activeStep === i ? 'on' : ''}`}
-                onClick={() => goToStep(i)}
-                aria-current={activeStep === i ? 'step' : undefined}
-                disabled={!showCanvas}
-              >
-                <span className="player-step-no">{i + 1}</span>
-                <span className="player-step-text">{s}</span>
-                {activeStep === i && showCanvas && (
-                  <ChevronRight size={13} className="player-step-arrow" />
-                )}
-              </button>
+            <li key={i} className="player-step">
+              <span className="player-step-no">{i + 1}</span>
+              <span className="player-step-text">{s}</span>
             </li>
           ))}
         </ol>

@@ -1040,9 +1040,11 @@ a:hover { text-decoration: underline; }
    动作演示区
    ============================================================
    替代原来的原生 <img src="x.gif">：内部是自己解码 GIF 后逐帧重绘，
-   剔掉定格帧让动作连贯（见 src/lib/gifFrames.ts）。
+   剔掉定格帧让动作连贯，再整体放慢 2 倍（见 src/components/ExercisePlayer.tsx）。
 
-   刻意没有控制条 —— 自动循环即可，用户唯一的操作是点下面的步骤。
+   刻意是**零交互**的 —— 没有控制条，步骤列表也不可点。
+   用户要的是「打开就看到动作在慢慢动」，不是「能操控」。
+   做过可点步骤 + 反向高亮的版本，被否掉了：点击跳帧会打断连续观察。
 
    背景必须和 .demo 的 --media-bg 一致：数据集素材是白底解剖线稿，
    canvas 的透明区域如果透出深色界面，人形边缘会出现一圈黑边。 */
@@ -1102,13 +1104,13 @@ a:hover { text-decoration: underline; }
   background: var(--media-bg);
 }
 
-/* ---------- 分步说明（可点，跳到对应画面） ---------- */
+/* ---------- 分步说明（纯文字，不可点） ---------- */
 .player-steps {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  counter-reset: pstep;
 }
+
 .player-step {
   display: flex;
   align-items: flex-start;
@@ -1121,15 +1123,7 @@ a:hover { text-decoration: underline; }
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.55;
-  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
 }
-.player-step:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
-.player-step.on {
-  color: var(--text);
-  background: var(--surface-3);
-  box-shadow: inset 2px 0 0 var(--accent);
-}
-.player-step:disabled { cursor: default; opacity: 0.75; }
 
 .player-step-no {
   flex-shrink: 0;
@@ -1146,12 +1140,8 @@ a:hover { text-decoration: underline; }
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
-/* 当前步骤的序号圈反过来填充，让「正在看哪一步」一眼可见 */
-.player-step.on .player-step-no { background: var(--accent); color: #fff; }
 
 .player-step-text { flex: 1; min-width: 0; }
-.player-step-arrow { flex-shrink: 0; margin-top: 3px; color: var(--accent); }
-
 
 /* ============================================================
    编排页
