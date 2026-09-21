@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test": "node e2e-run-all.cjs",
     "catalog:build": "node scripts/build-catalog.cjs",
     "dataset:fetch": "node scripts/fetch-dataset.cjs",
     "media:fetch": "node scripts/fetch-media.cjs"

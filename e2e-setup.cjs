@@ -60,24 +60,37 @@ function resolvePlaywright() {
  */
 function findChromium() {
   if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
-  const root = path.join(os.homedir(), 'AppData/Local/ms-playwright');
-  if (!fs.existsSync(root)) return undefined;
 
-  const dirs = fs
-    .readdirSync(root)
-    .filter((d) => d.startsWith('chromium'))
-    .sort()
-    .reverse();
+  // ms-playwright 的默认位置按平台分叉，CI（ubuntu）和本机（Windows）都要覆盖。
+  const home = os.homedir();
+  const roots = [
+    path.join(home, 'AppData/Local/ms-playwright'), // Windows
+    path.join(home, '.cache/ms-playwright'), // Linux / macOS
+    path.join(home, 'Library/Caches/ms-playwright'), // macOS 的另一处
+  ].filter((r) => fs.existsSync(r));
 
-  // 每组里按优先级试：完整版 chrome 优先于 headless_shell
+  if (!roots.length) return undefined;
+
+  const dirs = roots
+    .flatMap((root) => fs.readdirSync(root).map((d) => [root, d]))
+    .filter(([, d]) => d.startsWith('chromium'))
+    .sort((a, b) => b[1].localeCompare(a[1]))
+    .map(([root, d]) => path.join(root, d));
+
+  // 每组里按优先级试：完整版 chrome 优先于 headless_shell。
+  // 可执行文件名按平台分叉（Linux 无 .exe，macOS 是 .app 包），
+  // 全部列出来逐个探 —— 只返回真实存在的文件，多列几个平台不会有副作用。
   const layouts = [
-    ['chrome-win64/chrome.exe', 'chrome-win/chrome.exe'],
+    ['chrome-linux/chrome', 'chrome-linux64/chrome'], // Linux
+    ['chrome-win64/chrome.exe', 'chrome-win/chrome.exe'], // Windows
+    ['Chromium.app/Contents/MacOS/Chromium'], // macOS
+    ['chrome-headless-shell-linux64/chrome-headless-shell', 'chrome-linux/headless_shell'],
     ['chrome-headless-shell-win64/chrome-headless-shell.exe', 'chrome-win/headless_shell.exe'],
   ];
   for (const group of layouts) {
     for (const dir of dirs) {
       for (const rel of group) {
-        const p = path.join(root, dir, rel);
+        const p = path.join(dir, rel);
         if (fs.existsSync(p)) return p;
       }
     }

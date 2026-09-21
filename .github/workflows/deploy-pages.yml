@@ -102,6 +102,52 @@ jobs:
         with:
           path: dist
 
+  # 端到端测试。此前仓库里有 14 个套件却没有任何自动入口 —— 只能靠人手工
+  # `node xxx.cjs`，于是渐渐就没人跑了。这里补上，跑的是同一条命令：npm test。
+  #
+  # 为什么独立成一个 job 而不是复用 build 的产物：
+  #   复用要上传 140MB 的 dist artifact（媒体占大头），既占存储限额又要多一跳下载。
+  #   独立跑重复下载一次媒体，慢一点，但没有存储负担，且 job 之间互不牵扯。
+  #
+  # 为什么 needs 里没有它：e2e 偶发受环境抖动影响（超时、渲染时序），
+  # 让它挡住部署会因偶发失败误伤上线。它的作用是「把红灯亮出来」，不是「卡住发布」。
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # playwright 是可选依赖（理由见 e2e-setup.cjs 顶部：CI 构建不跑浏览器，
+      # 不想让每次 npm install 都拉几十 MB chromium）。所以这里临时装，
+      # 用 --no-save 避免污染 package.json —— CI 是临时的，不需要提交这行改动。
+      - name: Install Playwright + chromium
+        run: |
+          npm i --no-save playwright
+          npx playwright install --with-deps chromium
+
+      # 与 build job 同样需要媒体：多条断言真的会检查 GIF 是否加载出来
+      - name: Fetch dataset manifest
+        run: npm run dataset:fetch
+
+      - name: Fetch exercise media (138MB)
+        run: npm run media:fetch
+
+      # 不设 BASE_PATH —— 测试用默认 base（/），与 preview 服务的路径一致
+      - name: Build
+        run: npm run build
+
+      - name: Run e2e suites
+        run: npm test
+
   deploy:
     needs: build
     runs-on: ubuntu-latest

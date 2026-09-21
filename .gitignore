@@ -100,6 +100,20 @@ player-shots/
 !analyze-gif.cjs
 !analyze-gif-stats.cjs
 
+# 统一测试入口 —— package.json 的 test 脚本指向它，CI 也要跑，
+# 必须能 checkout 到，否则 npm test 直接找不到文件。
+!e2e-run-all.cjs
+
+# e2e-optimize.cjs 测「导入/导出 JSON」时落下的临时文件
+# （.tmp-bad.json 是故意写坏的那份，用来验证解析失败不崩）。
+# 每次跑测试都会重新生成，不该进版本库。
+.tmp-*.json
+
+# 计划向导套件。此前一直被 e2e-*.cjs 通配吃掉而没入库，
+# 但它断言的是「生成器按肌群/器械/场地怎么挑动作」这条核心行为，值得留下。
+# 顺带：它原先硬编码 5173，已改为读 BASE（默认值不变）。
+!e2e-wizard.cjs
+
 # 数据集原始清单（17MB）。用 npm run dataset:fetch 重新拉取，
 # name_zh.json 只有 80KB，保留入库以便查证中文名映射。
 scripts/exercises.json
