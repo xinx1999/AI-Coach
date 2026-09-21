@@ -50,8 +50,8 @@ export interface Exercise {
   thumb: string | null;
   /** 中文分步说明 */
   steps: string[];
-  /** 中文整段说明 */
-  instructions: string;
+  // 这里原本还有 `instructions`，已删除：它全量等于 steps.join(' ')（1318/1318），
+  // 是纯冗余，单独占 catalog 的 51%。需要整段文案时用 steps.join(' ')。
 }
 
 export interface SetsRep {

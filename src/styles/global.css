@@ -927,7 +927,6 @@ a:hover { text-decoration: underline; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.guide-text { font-size: 13.5px; line-height: 1.68; }
 .guide-steps {
   counter-reset: step;
   list-style: none;

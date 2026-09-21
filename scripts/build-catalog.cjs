@@ -128,8 +128,10 @@ for (const ex of raw) {
   const gif = ex.gif_url ? path.basename(ex.gif_url) : null;
   const thumb = ex.image ? path.basename(ex.image) : null;
 
+  // 只保留 steps。数据集的 `instructions` 字段全量等于 steps 用空格拼接
+  // （1318/1318 条，零例外），是纯冗余 —— 它单独占了 catalog 的 51%（455KB）。
+  // 别再把它加回来：要恢复就用 steps.join(' ')。
   const steps = (ex.instruction_steps && ex.instruction_steps.zh) || [];
-  const instructions = (ex.instructions && ex.instructions.zh) || '';
 
   out.push({
     id: ex.id,
@@ -155,7 +157,6 @@ for (const ex of raw) {
     gif,
     thumb,
     steps: steps.filter(Boolean),
-    instructions: instructions.trim(),
   });
 }
 

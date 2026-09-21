@@ -39,7 +39,10 @@ export default function GuidePanel({ slug, compact = false, stepsHandled = false
   /** 步骤由外部呈现时，这里不再重复列 */
   const showSteps = !stepsHandled;
 
-  if (!hasSteps && !ex.instructions) return null;
+  // 没有分步说明就没有要领可展示。
+  // 原先这里还有 `|| ex.instructions` 兜底，但实测 1318/1318 条都有 steps，
+  // 那个兜底从未触发过，随 instructions 字段一并删除。
+  if (!hasSteps) return null;
 
   return (
     <section className={`guide ${compact ? 'guide-compact' : ''}`}>
@@ -51,15 +54,12 @@ export default function GuidePanel({ slug, compact = false, stepsHandled = false
             </h3>
           </div>
 
-          {hasSteps ? (
-            <ol className="guide-steps">
-              {steps.map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ol>
-          ) : (
-            <p className="guide-text">{ex.instructions}</p>
-          )}
+          {/* 能走到这里说明 hasSteps 必为 true（上面已 return null） */}
+          <ol className="guide-steps">
+            {steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
         </>
       )}
 

@@ -80,26 +80,27 @@ const BASE = process.env.BASE || 'http://localhost:5173';
   await page.waitForSelector('.detail-modal', { timeout: 5000 });
   await page.waitForTimeout(1200);
 
-  // 核心改变：三张静态图 → 一个真正的循环动图
+  // 核心改变：三张静态图 → 一个真正的循环动图。
+  //
+  // 注意：演示区后来又重构了一次 —— 从 `<img src=x.gif>` 换成 ExercisePlayer 的
+  // **canvas 自解码播放**（剔定格帧 + 逐帧绘制），类名也从 .demo-media 变成
+  // .player-canvas。原先断言 `src.endsWith('.gif')` 因此在重构后必然失败，
+  // 与产品功能无关。这里改为按 canvas 的实际形态断言。
   const demo = await page.evaluate(() => {
-    const img = document.querySelector('.demo-media');
-    if (!img) return null;
-    return {
-      src: img.getAttribute('src') || '',
-      naturalW: img.naturalWidth,
-      naturalH: img.naturalHeight,
-    };
+    const c = document.querySelector('.player-canvas');
+    if (!c) return null;
+    return { tag: c.tagName, w: c.width, h: c.height };
   });
-  check(demo !== null, '详情页有演示区');
-  check(!!demo && demo.src.endsWith('.gif'), `演示是 GIF（${demo && demo.src}）`);
-  check(!!demo && demo.naturalW > 0, 'GIF 实际加载成功');
+  check(demo !== null, '详情页有演示区（canvas 播放器）');
+  check(!!demo && demo.tag === 'CANVAS', `演示是 canvas 播放器（${demo && demo.tag}）`);
+  check(!!demo && demo.w > 0 && demo.h > 0, `画布已渲染（${demo ? demo.w + 'x' + demo.h : 'null'}）`);
   check(!(await page.isVisible('.pose-row')), '已无「三张静态图」残留');
 
   // 抓两帧，确认它真的在动而不是一张静止图
-  const frameA = await page.locator('.demo-media').screenshot();
+  const frameA = await page.locator('.player-canvas').screenshot();
   await page.waitForTimeout(900);
-  const frameB = await page.locator('.demo-media').screenshot();
-  check(Buffer.compare(frameA, frameB) !== 0, 'GIF 两帧不同 —— 演示确实在动');
+  const frameB = await page.locator('.player-canvas').screenshot();
+  check(Buffer.compare(frameA, frameB) !== 0, '画布两帧不同 —— 演示确实在动');
 
   const detailTags = await page.locator('.detail-tag').allInnerTexts();
   console.log('  标签: ' + detailTags.join(' / '));
@@ -108,11 +109,15 @@ const BASE = process.env.BASE || 'http://localhost:5173';
   // ---------- 中文教程内容 ----------
   console.log('\n[B2] 中文分步教程');
   check(await page.isVisible('.detail-modal .guide'), '详情页有教程面板');
-  const guideTitle = await page.locator('.detail-modal .guide-title').innerText();
+  // 标题里图标与文字之间有空格（<Icon/> 动作要领），innerText 会带上前导空格，
+  // 所以比对前先 trim —— 断言的是文案本身，不是排版产生的空白。
+  const guideTitle = (await page.locator('.detail-modal .guide-title').innerText()).trim();
   check(guideTitle === '动作要领', `教程标题为「动作要领」（实际「${guideTitle}」）`);
-  const stepCount = await page.locator('.detail-modal .guide-steps li').count();
+  // 详情页传 stepsHandled=true：分步说明交给播放器 .player-steps 呈现，
+  // GuidePanel 里刻意不重复列（避免同一份文字要滚两遍）。所以查 .player-steps。
+  const stepCount = await page.locator('.detail-modal .player-steps li').count();
   check(stepCount >= 3, `分步说明 ${stepCount} 步（应 ≥3）`);
-  const stepTexts = await page.locator('.detail-modal .guide-steps li').allInnerTexts();
+  const stepTexts = await page.locator('.detail-modal .player-steps li').allInnerTexts();
   const hasChinese = stepTexts.every((t) => /[\u4e00-\u9fa5]/.test(t));
   check(hasChinese, '每一步都是中文文案');
   // 归属信息（主练 / 器械 / 部位 / 计量方式）统一在标题下方的 chips 行，
@@ -143,13 +148,14 @@ const BASE = process.env.BASE || 'http://localhost:5173';
   check(page.url().endsWith('#timer'), '跳转到计时页');
   check(await page.isVisible('.guided-card'), '计时界面已渲染');
 
-  // 计时页也要有动图，训练中才是最需要对照动作的时候
-  check(await page.isVisible('.guided-demo img'), '计时页显示动作演示');
+  // 计时页也要有动图，训练中才是最需要对照动作的时候。
+  // 与详情页同理：这里也换成了 ExercisePlayer 的 canvas，原 `.guided-demo img` 已不存在。
+  check(await page.isVisible('.guided-player .player-canvas'), '计时页显示动作演示');
   const guidedDemo = await page.evaluate(() => {
-    const i = document.querySelector('.guided-demo img');
-    return i ? { src: i.getAttribute('src') || '', w: i.naturalWidth } : null;
+    const c = document.querySelector('.guided-player .player-canvas');
+    return c ? { tag: c.tagName, w: c.width } : null;
   });
-  check(!!guidedDemo && guidedDemo.w > 0, `计时页动图加载成功（${guidedDemo && guidedDemo.src}）`);
+  check(!!guidedDemo && guidedDemo.w > 0, `计时页演示画布已渲染（${guidedDemo ? guidedDemo.w + 'px' : 'null'}）`);
 
   // 计时页的动作要领速查：默认收起，点开后出现内容
   check(await page.isVisible('.guided-guide-toggle'), '计时页有「动作要领」入口');
