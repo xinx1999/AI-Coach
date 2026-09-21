@@ -54,6 +54,11 @@ const SUITES = [
  * 拼 NODE_PATH —— e2e 脚本直接 require('playwright-core')，
  * 而 playwright 不一定装在项目里（见 e2e-setup.cjs）。
  * 把存在的候选目录都塞进去，子进程就能解析到。
+ *
+ * **没有候选路径时返回空字符串，且调用方不许因此报错。**
+ * 这些候选全是 Windows 的路径，在 CI（ubuntu）上一个都不存在；
+ * 但那里 playwright 是装进项目 node_modules 的，node 自己就能解析，
+ * 根本不需要 NODE_PATH。空值只意味着「交给默认的模块解析」。
  */
 function computeNodePath() {
   const home = os.homedir();
@@ -180,13 +185,9 @@ function runSuite(file, env) {
     process.exit(1);
   }
 
+  // 空就空着 —— 见 computeNodePath 的注释：CI 上不需要它。
+  // 真找不到 playwright 时，子进程自己会以清晰的错误退出，不需要在这里猜。
   const NODE_PATH = computeNodePath();
-  if (!NODE_PATH) {
-    console.error(
-      '\n找不到 playwright-core 的候选路径。安装方式见 e2e-setup.cjs 的顶部注释。\n',
-    );
-    process.exit(1);
-  }
 
   console.log(`\n启动 preview @ ${BASE} …`);
   const viteBin = path.join(ROOT, 'node_modules/vite/bin/vite.js');
@@ -222,8 +223,17 @@ function runSuite(file, env) {
     console.log(`总计 ${results.length} 个套件：${results.length - failed.length} 通过，${failed.length} 失败`);
     if (failed.length) {
       console.log('\n失败套件：');
-      for (const f of failed) console.log(`  ✗ ${f.file}  ${f.summary}`);
-      console.log('\n（要看完整输出：node ' + failed[0].file + '）');
+      for (const f of failed) {
+        console.log(`\n  ✗ ${f.file}  ${f.summary}`);
+        // CI 上拿不到 job 日志时（需 admin 权限），这几行就是唯一的线索，
+        // 所以把套件自己的尾部输出直接打出来，别只留一行摘要。
+        const tail = f.output
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .slice(-12);
+        for (const l of tail) console.log('      │ ' + l.slice(0, 200));
+      }
     }
     process.exitCode = failed.length ? 1 : 0;
   } finally {
