@@ -112,12 +112,17 @@ jobs:
   # 为什么 needs 里没有它：e2e 偶发受环境抖动影响（超时、渲染时序），
   # 让它挡住部署会因偶发失败误伤上线。它的作用是「把红灯亮出来」，不是「卡住发布」。
   #
-  # ⚠️ 已知问题：本 job 目前在 ubuntu runner 上会失败（跑到约第 3 个套件挂掉），
-  # 而本地 Windows 上 14 个套件全绿 —— 是环境差异，不是代码问题。
-  # 定位受阻：GitHub 的 job logs 端点要 admin 权限（403），拿不到具体报错。
-  # 在查清之前用 continue-on-error 避免每次 push 都挂红叉：
+  # ⚠️ 2026-09-22 定位到根因：11 个套件各自硬编码了一份 Windows 浏览器绝对路径
+  #    （C:/Users/Admin/AppData/Local/ms-playwright/.../chrome-headless-shell.exe）。
+  #    那个文件在 Windows 上真实存在 → 本地 14 个套件全绿；
+  #    在 ubuntu runner 上不存在 → chromium.launch() 立刻抛错，前几个套件连挂。
+  #    失败点正好落在列表前 3 个（e2e-equipment / e2e-landing / e2e-optimize），
+  #    与「跑到约第 3 个套件挂掉」的现象吻合。
+  #    修法：全部改用 e2e-setup.cjs 的跨平台探测，并在 npm test 里加了预检拦截。
+  #    日志拿不到（job logs 端点要 admin，403）时，这类「本地绿、CI 红」
+  #    只能靠这种侧面线索反推 —— 所以预检比事后排查划算得多。
+  # 在 CI 确认转绿之前暂时保留 continue-on-error：
   # 失败依然记录、依然点得开，只是不再把整体 workflow 染红。
-  # TODO: 拿到日志后定位具体套件，然后去掉 continue-on-error。
   test:
     runs-on: ubuntu-latest
     continue-on-error: true

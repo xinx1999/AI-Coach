@@ -88,6 +88,46 @@ function httpOk(url) {
   });
 }
 
+/**
+ * 预检：脚本里不许再出现硬编码的浏览器绝对路径。
+ *
+ * ## 为什么必须有这条
+ *
+ * 2026-09-22 之前，11 个套件各自抄了一份
+ *   C:/Users/Admin/AppData/Local/ms-playwright/.../chrome-headless-shell.exe
+ * 在 Windows 上那个文件真实存在 → 本地 14 个套件全绿；
+ * 在 ubuntu CI 上不存在 → chromium.launch() 立刻抛错，test job 连挂两次。
+ * 而 GitHub 的 job logs 端点要 admin 权限（403），拿不到报错，
+ * 只能靠「本地绿、CI 红 + 失败点在第 3 个套件」这种侧面线索反推，排查成本极高。
+ *
+ * 统一走 e2e-setup.cjs 之后，这条预检负责不让它复活 ——
+ * 写这一行远比再查一次便宜。
+ */
+function assertNoHardcodedBrowserPath() {
+  const BAD = /C:\/Users\/|ms-playwright\/chromium/;
+  const files = fs
+    .readdirSync(ROOT)
+    .filter((f) => f.endsWith('.cjs') && !f.startsWith('.') && f !== 'e2e-run-all.cjs');
+  const offenders = [];
+  for (const f of files) {
+    const lines = fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n');
+    lines.forEach((l, i) => {
+      // 注释里提到这个路径是允许的（本文件上面就在提），只拦真正的代码行
+      const code = l.trim();
+      if (code.startsWith('//') || code.startsWith('*') || code.startsWith('/*')) return;
+      if (BAD.test(l)) offenders.push(`${f}:${i + 1}  ${code.slice(0, 90)}`);
+    });
+  }
+  if (offenders.length) {
+    console.error(
+      '\n✗ 发现硬编码的浏览器路径 —— 在 ubuntu CI 上必然失败：\n  ' +
+        offenders.join('\n  ') +
+        '\n\n请改用：const { chromium, executablePath: EXE } = require("./e2e-setup.cjs");\n',
+    );
+    process.exit(1);
+  }
+}
+
 async function waitForServer(timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -178,6 +218,9 @@ function runSuite(file, env) {
     console.error('\n没有任何套件可跑。\n');
     process.exit(1);
   }
+
+  // 先拦硬编码路径：它会让「本地绿、CI 红」，而且报错离真实原因很远。
+  assertNoHardcodedBrowserPath();
 
   // 必须有构建产物，preview 才有东西可服务
   if (!fs.existsSync(path.join(ROOT, 'dist', 'index.html'))) {

@@ -10,12 +10,11 @@
  * 懒加载的图片在视口外时 naturalWidth 恒为 0，
  * 和「路径 404」在数值上完全一样，极易误判。
  */
-const { chromium } = require('playwright-core');
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXECUTABLE } = require('./e2e-setup.cjs');
 const path = require('path');
 
 const SITE = 'https://xiangx9.github.io/AI-Coach/';
-const EXECUTABLE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
 
 let pass = 0;
 let fail = 0;

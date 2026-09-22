@@ -1,6 +1,6 @@
 /** 截取新版首次落点，用于人工核对 */
-const { chromium } = require('playwright-core');
-const EXE = 'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 
 (async () => {
   const b = await chromium.launch({ executablePath: EXE });

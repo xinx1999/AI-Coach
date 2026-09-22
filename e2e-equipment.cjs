@@ -7,9 +7,9 @@
  * 因此关键断言是「生成结果里的器械 ⊆ 用户勾选的 ∪ {自重}」，
  * 而不是只看 UI 上有没有出现那个选择器。
  */
-const { chromium } = require('playwright-core');
-const EXE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+// 浏览器路径一律走 e2e-setup：它按平台扫 ms-playwright，Windows / Linux / macOS 都能找到。
+// 别再在这里硬编码 C:/Users/... 的绝对路径 —— 那样本地绿、CI 必红（ubuntu 上那个文件不存在）。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 const BASE = process.env.BASE || 'http://localhost:4199';
 
 let fail = 0;

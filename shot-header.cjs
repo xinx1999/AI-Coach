@@ -2,11 +2,9 @@
  * 放大截取顶栏，确认没有像素级的错位或残影。
  * 用 canvas 在浏览器里做缩放，避免引入额外依赖。
  */
-const { chromium } = require('playwright-core');
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXECUTABLE } = require('./e2e-setup.cjs');
 const path = require('path');
-
-const EXECUTABLE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
 
 (async () => {
   const browser = await chromium.launch({ executablePath: EXECUTABLE });

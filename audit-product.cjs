@@ -2,9 +2,8 @@
  * 产品视角审计脚本：验证几处「从代码读出来但需要运行时确认」的结论。
  * 只读、不改数据，用于给评审报告提供证据。
  */
-const { chromium } = require('playwright-core');
-const EXE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 const BASE = process.env.BASE || 'http://localhost:4199';
 
 (async () => {

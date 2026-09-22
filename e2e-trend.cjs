@@ -3,9 +3,8 @@
  * 空状态与数据不足时的表现。
  * 只读检查 + 构造临时数据（每次先清 localStorage），不碰用户真实数据。
  */
-const { chromium } = require('playwright-core');
-const EXE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 const BASE = process.env.BASE || 'http://localhost:4199';
 
 let fail = 0;

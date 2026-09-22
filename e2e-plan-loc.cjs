@@ -9,9 +9,8 @@
  *   2. 结果列表每条的场地胶囊    —— 标出动作属于哪个场地
  *   3. 回退提示                  —— 所选场地无该肌群动作时，胶囊能解释为什么
  */
-const { chromium } = require('playwright-core');
-const EXE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 const BASE = process.env.BASE || 'http://localhost:5173';
 
 let fail = 0;

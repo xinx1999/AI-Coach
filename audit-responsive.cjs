@@ -13,11 +13,10 @@
  *   1024 平板横屏 / 小笔记本
  *   1440 桌面
  */
-const { chromium } = require('playwright-core');
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXECUTABLE } = require('./e2e-setup.cjs');
 
 const BASE = 'http://localhost:5173';
-const EXECUTABLE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
 
 const WIDTHS = [
   { w: 320, label: '320 极小手机' },

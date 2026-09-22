@@ -2,10 +2,9 @@
  * E2E：驱动「计划」向导，验证生成 → 写入编排页的完整链路。
  * 用单进程 playwright-core，避免 playwright-cli 跨进程丢 session 的问题。
  */
-const { chromium } = require('playwright-core');
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 
-const EXE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
 // 默认仍是 dev server 端口（不改动既有用法），但支持 BASE 覆盖，
 // 好让统一的 test runner 能指向 preview 的 4199。
 const BASE = process.env.BASE || 'http://localhost:5173';

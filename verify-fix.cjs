@@ -9,9 +9,8 @@
  * 同时：usePersistentState 已改为 null 不落盘（removeItem 而非写 "null"），
  *   所以「没有进行中的训练」现在表现为键不存在，而不是值为字符串 "null"。
  */
-const { chromium } = require('playwright-core');
-const EXE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 const BASE = process.env.BASE || 'http://localhost:5173';
 const SESSION_KEY = 'strong-trainer-active-session';
 

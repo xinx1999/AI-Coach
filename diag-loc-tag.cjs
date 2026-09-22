@@ -3,9 +3,8 @@
  * 切换到「健身房」后，自重动作的标签应是中性灰的「自重」，
  * 不能是绿色的「在家」——后者会让用户以为生成器把场地搞错了。
  */
-const { chromium } = require('playwright-core');
-const EXE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 
 const URL = process.env.URL || 'http://localhost:4199/';
 

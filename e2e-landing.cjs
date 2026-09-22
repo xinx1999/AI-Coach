@@ -4,9 +4,8 @@
  * 落点必须按用户「此刻的处境」来定，而不是固定给一个工具页：
  *   深链 > 进行中训练 > 已有编排 > 空手 → 计划页
  */
-const { chromium } = require('playwright-core');
-const EXE =
-  'C:/Users/Admin/AppData/Local/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-win64/chrome-headless-shell.exe';
+// 浏览器路径走 e2e-setup（跨平台），别硬编码绝对路径 —— 本地绿、CI 红的元凶。
+const { chromium, executablePath: EXE } = require('./e2e-setup.cjs');
 const BASE = process.env.BASE || 'http://localhost:4199';
 
 let fail = 0;
