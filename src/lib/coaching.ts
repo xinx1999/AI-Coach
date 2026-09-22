@@ -85,71 +85,101 @@ function breathingFor(ex: Exercise): string {
   return '发力时呼气，还原时吸气，不要憋气。';
 }
 
-/** 常见错误。按动作特征拼装，只给这个动作真正容易犯的，不套模板刷条目 */
+/**
+ * 常见错误。按动作特征拼装，只给这个动作真正容易犯的，不套模板刷条目。
+ *
+ * ## 为什么按「具体度」排序，而不是按生成顺序
+ *
+ * 最后只保留 3 条。早先的实现是**按生成顺序**取前 3 条，
+ * 而生成顺序是「负重通病 → 核心 → 部位专属 → 兜底」——
+ * 两条通用的负重提示永远排在最前面，把部位专属的挤掉了。
+ *
+ * 实测（2026-09-22，全量 1318 条）：
+ *   - 负重 + 下肢：只有 **22.2%** 拿到「膝内扣 / 脚跟离地」
+ *     （`upper legs` 同时命中核心集 → 负重 2 条 + 塌腰 1 条就占满 3 格）
+ *   - 负重 + 拉类：**52.4%** 拿到「耸肩代偿」
+ *   - 负重 + 推类：**68.5%**，而**自重**推类（对照组）有 **88.8%**
+ *     —— 差距全来自那两条通用负重提示的占位
+ *
+ * 也就是说，注释写着「只留最相关的 3 条」，实现留的却是「最先入队的 3 条」。
+ * 现在按具体度分级：部位/目标肌群专属 → 计量方式专属 → 核心 → 负重通病 → 兜底。
+ * 同级别保持原顺序。**条数上限仍是 3** —— 那是当初有意的设计取舍，不动。
+ */
 function mistakesFor(ex: Exercise): string[] {
-  const out: string[] = [];
+  // rank 越小越具体，越该优先保留
+  const RANK_SPECIFIC = 0;
+  const RANK_CORE = 1;
+  const RANK_WEIGHTED = 2;
+  const RANK_FALLBACK = 3;
+
+  const out: { text: string; rank: number }[] = [];
+  const add = (text: string, rank: number) => out.push({ text, rank });
   const weighted = isWeighted(ex);
 
   // 拉伸类单独一套：它的问题和力量训练完全不同
   if (ex.stretch) {
-    out.push('弹震式地上下压 —— 应该保持静止拉伸，靠呼吸逐渐加深，弹震容易拉伤。');
-    out.push('拉到刺痛还硬扛 —— 应该是明显的牵拉感但不痛，痛就是过量了。');
+    add('弹震式地上下压 —— 应该保持静止拉伸，靠呼吸逐渐加深，弹震容易拉伤。', RANK_SPECIFIC);
+    add('拉到刺痛还硬扛 —— 应该是明显的牵拉感但不痛，痛就是过量了。', RANK_SPECIFIC);
     if (ex.metric === 'duration') {
-      out.push('憋着气数秒 —— 应该匀速呼吸，呼气时再推进一点幅度。');
+      add('憋着气数秒 —— 应该匀速呼吸，呼气时再推进一点幅度。', RANK_SPECIFIC);
     }
-    return out;
+    return out.map((t) => t.text);
   }
 
   // 有氧/距离类
   if (ex.metric === 'distance') {
-    out.push('一开始就冲太快 —— 应该前 5 分钟慢速热身，让心率平稳爬升。');
-    out.push('呼吸全靠嘴急促吸 —— 应该鼻吸口呼、配合节奏，避免岔气。');
-    return out;
+    add('一开始就冲太快 —— 应该前 5 分钟慢速热身，让心率平稳爬升。', RANK_SPECIFIC);
+    add('呼吸全靠嘴急促吸 —— 应该鼻吸口呼、配合节奏，避免岔气。', RANK_SPECIFIC);
+    return out.map((t) => t.text);
   }
 
-  // 计时类静力动作（平板支撑等）
+  // 计时类静力动作（平板支撑等）：憋气是它最高发的问题，算专属级
   if (ex.metric === 'duration') {
-    out.push('憋气硬撑 —— 应该匀速呼吸，宁可缩短时间也别憋气。');
-  }
-
-  // 负重动作的通病：借力、失控、幅度不足
-  if (weighted) {
-    out.push('靠惯性甩起来 —— 应该全程控制，尤其回放阶段慢放 2 秒，甩起来的重量练不到目标肌肉。');
-    out.push('回放直接松劲自由落体 —— 应该主动控制着放回去，离心阶段才是长肌肉的关键。');
-  }
-
-  // 站姿 / 核心参与的动作：塌腰和关节锁死是高发问题
-  if (CORE_CRITICAL_PARTS.has(ex.bodyPart) || ex.target === 'core') {
-    out.push('塌腰或弓背代偿 —— 应该收紧腹部、保持脊柱中立，宁可减重量也不要变形。');
+    add('憋气硬撑 —— 应该匀速呼吸，宁可缩短时间也别憋气。', RANK_SPECIFIC);
   }
 
   // 推类动作（胸、肩、三头）：肘部外展和锁死
   if (ex.bodyPart === 'chest' || ex.bodyPart === 'shoulders' || ex.target === 'triceps') {
-    out.push('肘部张得太开（接近 90° 外展）—— 应该让肘部与身体成 45° 左右，肩关节压力小得多。');
-    out.push('在顶点把关节锁死 —— 应该留一点微屈，让肌肉持续吃力而不是让骨头承重。');
+    add('肘部张得太开（接近 90° 外展）—— 应该让肘部与身体成 45° 左右，肩关节压力小得多。', RANK_SPECIFIC);
+    add('在顶点把关节锁死 —— 应该留一点微屈，让肌肉持续吃力而不是让骨头承重。', RANK_SPECIFIC);
   }
 
   // 拉类动作（背、二头）：耸肩和用腰甩
   if (ex.bodyPart === 'back' || ex.target === 'biceps') {
-    out.push('耸肩用斜方肌代偿 —— 应该先把肩胛骨下沉、固定住，再发力拉起。');
+    add('耸肩用斜方肌代偿 —— 应该先把肩胛骨下沉、固定住，再发力拉起。', RANK_SPECIFIC);
   }
 
   // 下肢：膝内扣和脚跟离地
   if (ex.bodyPart === 'upper legs' || ex.bodyPart === 'lower legs') {
-    out.push('膝盖内扣 —— 应该让膝盖始终对准脚尖方向，这对保护膝关节很重要。');
-    out.push('脚跟离地、重心前移到脚尖 —— 应该踩实全脚掌，把重心压在足中。');
+    add('膝盖内扣 —— 应该让膝盖始终对准脚尖方向，这对保护膝关节很重要。', RANK_SPECIFIC);
+    add('脚跟离地、重心前移到脚尖 —— 应该踩实全脚掌，把重心压在足中。', RANK_SPECIFIC);
   }
 
   // 腕/小臂类
   if (ex.bodyPart === 'lower arms') {
-    out.push('手腕过度弯折 —— 应该让手腕保持中立位，和前臂成一条直线。');
+    add('手腕过度弯折 —— 应该让手腕保持中立位，和前臂成一条直线。', RANK_SPECIFIC);
+  }
+
+  // 站姿 / 核心参与的动作：塌腰和关节锁死是高发问题
+  if (CORE_CRITICAL_PARTS.has(ex.bodyPart) || ex.target === 'core') {
+    add('塌腰或弓背代偿 —— 应该收紧腹部、保持脊柱中立，宁可减重量也不要变形。', RANK_CORE);
+  }
+
+  // 负重动作的通病：借力、失控
+  if (weighted) {
+    add('靠惯性甩起来 —— 应该全程控制，尤其回放阶段慢放 2 秒，甩起来的重量练不到目标肌肉。', RANK_WEIGHTED);
+    add('回放直接松劲自由落体 —— 应该主动控制着放回去，离心阶段才是长肌肉的关键。', RANK_WEIGHTED);
   }
 
   // 兜底：任何动作都不该做到力竭为止
-  out.push('为了凑次数做到力竭变形 —— 应该在姿势开始走形时停下，最后一两次的质量比总数更重要。');
+  add('为了凑次数做到力竭变形 —— 应该在姿势开始走形时停下，最后一两次的质量比总数更重要。', RANK_FALLBACK);
 
-  // 只留最相关的 3 条，多了用户不会看完
-  return out.slice(0, 3);
+  // 稳定排序（同 rank 保持原顺序），只留最相关的 3 条，多了用户不会看完
+  return out
+    .map((t, i) => ({ ...t, i }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .slice(0, 3)
+    .map((t) => t.text);
 }
 
 /**

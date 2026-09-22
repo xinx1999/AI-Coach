@@ -47,6 +47,11 @@ public/media/
 !audit-product.cjs
 !verify-fix.cjs
 !verify-media.cjs
+!verify-coaching.cjs
+# verify-coaching 守的是「常见错误」那 3 条提示的覆盖质量。
+# 2026-09-22 发现：实现按「生成顺序」取前 3 条，导致通用提示挤掉专属提示 ——
+# 负重+下肢只有 22.2% 拿到「膝内扣」，而这是完全静默的（界面照样 3 条，只是内容不对）。
+# 改成按具体度排序后升到 99.4%。这个套件逐类全量扫描，防止排序再退化。
 !shot-redesign.cjs
 # verify-backlog 核验评审报告「待办清单」的实际状态，逐条在运行中的应用上取证。
 # 报告状态与代码一旦再次脱节，这个脚本是唯一能自动发现的网。

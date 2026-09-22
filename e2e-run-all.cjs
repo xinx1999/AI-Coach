@@ -46,6 +46,7 @@ const SUITES = [
   'e2e-trend.cjs',
   'e2e-wizard.cjs',
   'verify-backlog.cjs',
+  'verify-coaching.cjs',
   'verify-fix.cjs',
   'verify-media.cjs',
 ];
