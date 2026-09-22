@@ -119,11 +119,16 @@ function assertNoHardcodedBrowserPath() {
     });
   }
   if (offenders.length) {
-    console.error(
-      '\n✗ 发现硬编码的浏览器路径 —— 在 ubuntu CI 上必然失败：\n  ' +
-        offenders.join('\n  ') +
-        '\n\n请改用：const { chromium, executablePath: EXE } = require("./e2e-setup.cjs");\n',
-    );
+    const detail =
+      '发现硬编码的浏览器路径 —— 在 ubuntu CI 上必然失败：\n  ' +
+      offenders.join('\n  ') +
+      '\n\n请改用：const { chromium, executablePath: EXE } = require("./e2e-setup.cjs");';
+    console.error('\n✗ ' + detail + '\n');
+    // 日志匿名读不到（见 emitFailureAnnotations 的说明），再发一份到注解。
+    if (process.env.GITHUB_ACTIONS) {
+      const esc = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A');
+      console.log(`::error title=预检失败: 硬编码浏览器路径::${esc(detail).slice(0, 6000)}`);
+    }
     process.exit(1);
   }
 }
@@ -168,6 +173,46 @@ function summarize(stdout) {
   );
   if (hit) return hit.replace(/\s+/g, ' ').slice(0, 70);
   return lines.length ? lines[lines.length - 1].slice(0, 70) : '(无输出)';
+}
+
+/**
+ * 把失败详情写成 GitHub Actions 注解（::error::）。
+ *
+ * ## 为什么需要这个
+ *
+ * GitHub 的 job logs 端点要 admin 权限，匿名访问返回
+ * `403 Must have admin rights to Repository.` —— 日志正文根本拿不到。
+ * 2026-09-22 排查 test job 失败时就被这个卡住，只能靠「本地绿、CI 红」
+ * 加失败点位置这种侧面线索反推，绕了很大一圈。
+ *
+ * 但 **check-runs 的 annotations 接口是匿名可读的**：
+ *   GET /repos/{owner}/{repo}/commits/{ref}/check-runs      → 拿 check_run id
+ *   GET /repos/{owner}/{repo}/check-runs/{id}/annotations   → 读注解正文
+ * （已实测：连 runner 自己发的 Node 20 弃用警告都能读到。）
+ *
+ * 所以这里把「哪个套件挂了 + 它的尾部输出」写成注解，
+ * 等于给自己留了一条能匿名读的通道。注解长度上限很宽松，
+ * 但太长了人也看不完，所以每个套件截 6000 字符。
+ *
+ * 只在 GitHub Actions 环境里发 —— 本地跑时这串东西是噪音。
+ */
+function emitFailureAnnotations(failed) {
+  if (!process.env.GITHUB_ACTIONS) return;
+  // 工作流命令的转义：% 必须最先替换，换行用 %0A
+  const esc = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A');
+  for (const f of failed) {
+    const tail = f.output
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .slice(-20)
+      .join('\n');
+    const body = esc(`${f.summary}\n\n${tail}`).slice(0, 6000);
+    console.log(`::error title=套件失败: ${f.file}::${body}`);
+  }
+  console.log(
+    `::error title=e2e 汇总::${esc(`${failed.length} 个套件失败：${failed.map((f) => f.file).join(', ')}`)}`,
+  );
 }
 
 function runSuite(file, env) {
@@ -277,6 +322,8 @@ function runSuite(file, env) {
           .slice(-12);
         for (const l of tail) console.log('      │ ' + l.slice(0, 200));
       }
+      // 上面这些只进日志；日志匿名读不到，所以再发一份到注解里。
+      emitFailureAnnotations(failed);
     }
     process.exitCode = failed.length ? 1 : 0;
   } finally {

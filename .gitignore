@@ -116,6 +116,16 @@ player-shots/
 # 顺带：它原先硬编码 5173，已改为读 BASE（默认值不变）。
 !e2e-wizard.cjs
 
+# 补两个漏网的套件（2026-09-22 发现）。
+# e2e-optimize 有 543 行断言，测备份导入导出、计时器时间戳、偏好持久化、
+# 类型化输入、截断存档、收藏、弹窗焦点管理 —— 这么大的回归网被通配吃掉，
+# 等于白写；e2e-redesign 测改版后的「连加 3 个动作」链路。
+# 两个都被 e2e-run-all.cjs 的 SUITES 列着，但 fresh clone 下文件不存在、
+# 只能被跳过 —— 也就是说 CI 上一直在跑 12 个而不是 14 个。
+# 入库后 SUITES 才是诚实的。
+!e2e-optimize.cjs
+!e2e-redesign.cjs
+
 # 数据集原始清单（17MB）。用 npm run dataset:fetch 重新拉取，
 # name_zh.json 只有 80KB，保留入库以便查证中文名映射。
 scripts/exercises.json
