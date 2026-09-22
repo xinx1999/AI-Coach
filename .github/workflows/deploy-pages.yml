@@ -121,11 +121,10 @@ jobs:
   #    修法：全部改用 e2e-setup.cjs 的跨平台探测，并在 npm test 里加了预检拦截。
   #    日志拿不到（job logs 端点要 admin，403）时，这类「本地绿、CI 红」
   #    只能靠这种侧面线索反推 —— 所以预检比事后排查划算得多。
-  # 在 CI 确认转绿之前暂时保留 continue-on-error：
-  # 失败依然记录、依然点得开，只是不再把整体 workflow 染红。
+  #    修复后 CI 已确认转绿（run 35676248618，三个 job 全 success）。
+  #    因此不再需要 continue-on-error：这个 job 现在能真实反映测试状态。
   test:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
