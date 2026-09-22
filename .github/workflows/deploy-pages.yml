@@ -160,6 +160,14 @@ jobs:
       - name: Run e2e suites
         run: npm test
 
+      # ⚠️ 临时探针：验证「注解通道」在真实 CI 上可用，验证后删除。
+      # 背景：job logs 端点要 admin（403），匿名读不到日志；
+      # 而 check-runs 的 annotations 接口匿名可读。
+      # 所以失败详情改走 ::error:: 注解 —— 但得先证明这条路真的通。
+      - name: Probe annotation channel (temporary)
+        run: |
+          echo "::notice title=probe-title::第一行%0A第二行 含百分号 %25 的转义测试"
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
