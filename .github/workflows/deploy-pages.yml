@@ -123,6 +123,16 @@ jobs:
   #    只能靠这种侧面线索反推 —— 所以预检比事后排查划算得多。
   #    修复后 CI 已确认转绿（run 35676248618，三个 job 全 success）。
   #    因此不再需要 continue-on-error：这个 job 现在能真实反映测试状态。
+  #
+  # 📖 怎么在没有 admin 权限的情况下看这个 job 的失败原因：
+  #    job logs 端点要 admin（403），但 **check-runs 的 annotations 接口匿名可读**。
+  #    所以 e2e-run-all.cjs 在失败时会额外发 ::error:: 注解
+  #    （哪个套件挂了 + 它的尾部输出）。读法：
+  #      curl -s "https://api.github.com/repos/<owner>/<repo>/commits/<sha>/check-runs"
+  #      curl -s "https://api.github.com/repos/<owner>/<repo>/check-runs/<id>/annotations"
+  #    该通道已用 notice 探针在真实 CI 上验证过（含 %0A / %25 转义正确解码）。
+  #    走不通的路记一下省得重试：artifact 不能匿名下载（401）；
+  #    WebFetch 能开 job 页面但读不到日志正文（JS 加载）。
   test:
     runs-on: ubuntu-latest
     steps:
@@ -159,14 +169,6 @@ jobs:
 
       - name: Run e2e suites
         run: npm test
-
-      # ⚠️ 临时探针：验证「注解通道」在真实 CI 上可用，验证后删除。
-      # 背景：job logs 端点要 admin（403），匿名读不到日志；
-      # 而 check-runs 的 annotations 接口匿名可读。
-      # 所以失败详情改走 ::error:: 注解 —— 但得先证明这条路真的通。
-      - name: Probe annotation channel (temporary)
-        run: |
-          echo "::notice title=probe-title::第一行%0A第二行 含百分号 %25 的转义测试"
 
   deploy:
     needs: build
