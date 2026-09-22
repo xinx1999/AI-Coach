@@ -1,5 +1,10 @@
 // 中文翻译映射 —— 肌群 / 器械 / 训练类型 / 动作名称
-// 数据源为 @bryllim/workout-guide（英文），此处提供中文显示回退
+//
+// ⚠️ 本文件当前**没有任何引用**（已核实：src/ 无 import，构建产物里也搜不到它的译名）。
+// 它是早期用 @bryllim/workout-guide 那套数据时的翻译层 —— key 是 'bench-press'
+// 这类通用 slug；后来数据源换成 Devillmy/exercises-dataset-zh（数字 slug，
+// 且 catalog.json 自带 nameZh / bodyPartZh 等字段），这个文件就被架空了。
+// 保留原因：暂无。**如果要清理，删掉即可**（先确认没人打算复用）。
 
 const muscleZh: Record<string, string> = {
   Adductors: '内收肌',
