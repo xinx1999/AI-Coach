@@ -21,8 +21,10 @@ export interface SecondaryMuscle {
  * 因此不再需要「待专业校对」的免责标注。
  */
 export interface Exercise {
-  /** 数据集内的稳定 ID，同时用作 slug */
-  id: string;
+  /**
+   * 数据集内的稳定 ID，同时用作路由/存储里的键。
+   * 原来还有个与之完全相同的 `id` 字段（构建脚本里是同一个表达式），已删除。
+   */
   slug: string;
   /** 英文名，保留用于检索（很多用户会打英文） */
   name: string;

@@ -72,9 +72,9 @@ export function loadSteps(): Promise<void> {
   return promise;
 }
 
-/** 取某个动作的步骤。未加载完 / 该动作没有步骤时返回空数组 */
-export function stepsFor(id: string): string[] {
-  return map?.[id] ?? EMPTY;
+/** 取某个动作的步骤（键是 `exercise.slug`）。未加载完 / 该动作没有步骤时返回空数组 */
+export function stepsFor(slug: string): string[] {
+  return map?.[slug] ?? EMPTY;
 }
 
 /** 供 useSyncExternalStore 订阅加载完成事件 */

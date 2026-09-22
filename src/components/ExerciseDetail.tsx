@@ -35,7 +35,7 @@ export default function ExerciseDetail({
   // 未加载完时返回稳定的空数组，播放器对空步骤已有守卫（steps.length > 0）。
   const steps = useSyncExternalStore(
     subscribeSteps,
-    () => stepsFor(exercise.id),
+    () => stepsFor(exercise.slug),
     () => EMPTY_STEPS, // SSR 快照
   );
 

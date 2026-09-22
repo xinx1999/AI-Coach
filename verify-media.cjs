@@ -36,7 +36,7 @@ console.log('缺失缩略图:', missingThumb.length, missingThumb.slice(0, 8));
 
 // 顺便核对中文字段完整度
 const noZh = catalog.filter((e) => !e.nameZh);
-const noSteps = catalog.filter((e) => !stepsMap[e.id] || stepsMap[e.id].length === 0);
+const noSteps = catalog.filter((e) => !stepsMap[e.slug] || stepsMap[e.slug].length === 0);
 const noTargetZh = catalog.filter((e) => !e.targetZh);
 const noEquipZh = catalog.filter((e) => !e.equipmentZh);
 const noPartZh = catalog.filter((e) => !e.bodyPartZh);
@@ -46,8 +46,9 @@ console.log('缺 targetZh:', noTargetZh.length, noTargetZh.slice(0, 5).map((e) =
 console.log('缺 equipmentZh:', noEquipZh.length, noEquipZh.slice(0, 5).map((e) => e.equipment));
 console.log('缺 bodyPartZh:', noPartZh.length);
 
-// catalog 与 steps 两个文件的 id 必须一一对应，否则会静默丢步骤
-const catIds = new Set(catalog.map((e) => e.id));
+// catalog 与 steps 两个文件的键必须一一对应，否则会静默丢步骤
+// （catalog 用 `slug`，steps 的键也是同一批数据集 id —— 见 scripts/build-catalog.cjs）
+const catIds = new Set(catalog.map((e) => e.slug));
 const stepIds = new Set(Object.keys(stepsMap));
 const onlyInCat = [...catIds].filter((id) => !stepIds.has(id));
 const onlyInSteps = [...stepIds].filter((id) => !catIds.has(id));

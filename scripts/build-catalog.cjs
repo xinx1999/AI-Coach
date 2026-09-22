@@ -154,7 +154,9 @@ for (const ex of raw) {
   const steps = (ex.instruction_steps && ex.instruction_steps.zh) || [];
 
   out.push({
-    id: ex.id,
+    // 只留 slug。原来还有个 `id: ex.id` —— 与 slug 是同一个表达式，纯冗余，
+    // 每条约 12 字节（全量 15.8KB raw / 5.0KB gzip）。删掉它需要同时改
+    // lib/types.ts 的 Exercise、两个 stepsFor(...) 调用点和两个校验脚本。
     slug: ex.id,                       // 用数据集 id 做稳定的 slug
     name: nameEn,
     nameZh: zhName,
@@ -179,6 +181,7 @@ for (const ex of raw) {
   });
 
   // steps 不进 catalog.json，单独落盘（理由见 OUT_STEPS）
+  // 注意：这里的 key 就是 slug（数据集 id），前端用 `stepsFor(exercise.slug)` 取
   stepsById[ex.id] = steps.filter(Boolean);
 }
 

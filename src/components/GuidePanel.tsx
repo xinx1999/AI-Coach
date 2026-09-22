@@ -37,7 +37,7 @@ export default function GuidePanel({ slug, compact = false, stepsHandled = false
   // hook 不能放在下面的 early return 之后，所以这里先算好。
   const steps = useSyncExternalStore(
     subscribeSteps,
-    () => (ex ? stepsFor(ex.id) : EMPTY_STEPS),
+    () => (ex ? stepsFor(ex.slug) : EMPTY_STEPS),
     () => EMPTY_STEPS, // SSR 快照
   );
 

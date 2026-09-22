@@ -37,8 +37,9 @@ const SESSION_KEY = 'strong-trainer-active-session';
   console.log('\n[A] catalog 与 steps 两个文件的对应关系');
 
   check(!('steps' in catalog[0]), 'catalog.json 里已经没有 steps 字段（真的拆出去了）');
+  check(!('id' in catalog[0]), 'catalog.json 里没有冗余的 id 字段（只用 slug）');
 
-  const catIds = new Set(catalog.map((e) => e.id));
+  const catIds = new Set(catalog.map((e) => e.slug));
   const stepIds = new Set(Object.keys(stepsMap));
   const missing = [...catIds].filter((id) => !stepIds.has(id));
   const extra = [...stepIds].filter((id) => !catIds.has(id));
@@ -53,12 +54,12 @@ const SESSION_KEY = 'strong-trainer-active-session';
   const nameCount = {};
   for (const e of catalog) if (e.nameZh) nameCount[e.nameZh] = (nameCount[e.nameZh] || 0) + 1;
   const sample = catalog
-    .filter((e) => e.nameZh && nameCount[e.nameZh] === 1 && (stepsMap[e.id] || []).length > 0)
-    .sort((a, b) => stepsMap[b.id].length - stepsMap[a.id].length)[0];
-  const slug = sample.id;
+    .filter((e) => e.nameZh && nameCount[e.nameZh] === 1 && (stepsMap[e.slug] || []).length > 0)
+    .sort((a, b) => stepsMap[b.slug].length - stepsMap[a.slug].length)[0];
+  const slug = sample.slug;
   const sampleName = sample.nameZh;
   const expectSteps = stepsMap[slug].length;
-  console.log(`  · 样例动作 id=${slug}「${sampleName}」，${expectSteps} 步`);
+  console.log(`  · 样例动作 slug=${slug}「${sampleName}」，${expectSteps} 步`);
 
   // ---------- 浏览器 ----------
   const browser = await chromium.launch({ executablePath: EXE });
