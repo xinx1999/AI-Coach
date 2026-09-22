@@ -25,6 +25,24 @@ const ROOT = path.resolve(__dirname, '..');
 const SRC = path.join(ROOT, 'scripts');
 const OUT = path.join(ROOT, 'src/lib/catalog.json');
 
+/**
+ * 分步说明单独出一个文件，不放进 catalog.json。
+ *
+ * 为什么：`steps` 一个字段就占 catalog 的 **42.8%**（469KB raw / 72KB gzip），
+ * 但**只有详情页和计时页用得上**（GuidePanel / ExercisePlayer）——
+ * 浏览列表、筛选、搜索、生成计划全都用不到它。
+ * 把它留在 catalog.json 里，等于每次首屏都要下载+解析 1318 个动作的完整步骤，
+ * 只为渲染一个 60 张卡片的列表。
+ *
+ * 拆出去后首屏 JS 从 245.5KB gzip 降到约 165KB（−33%），
+ * 这个文件由 src/lib/steps.ts 在启动时异步加载（见那里的说明）。
+ *
+ * 放 public/ 而不是 src/：走 fetch 而不是打进 bundle，才能真的延后。
+ * 注意 public/ 下的文件不做哈希，靠 SW 的 /assets/ 规则之外单独缓存 —— 
+ * 但它在 `assets/` 之外，SW 的策略要能覆盖到（见 public/sw.js）。
+ */
+const OUT_STEPS = path.join(ROOT, 'public/catalog-steps.json');
+
 const raw = JSON.parse(fs.readFileSync(path.join(SRC, 'exercises.json'), 'utf8'));
 const nameZh = JSON.parse(fs.readFileSync(path.join(SRC, 'name_zh.json'), 'utf8'));
 
@@ -113,6 +131,8 @@ function isHomeFriendly(ex) {
 // ---- 生成 ----
 const seen = new Map();
 const out = [];
+/** id → steps[]，单独落 OUT_STEPS，不混进 catalog.json */
+const stepsById = {};
 
 for (const ex of raw) {
   const nameEn = (ex.name || '').trim();
@@ -156,8 +176,10 @@ for (const ex of raw) {
     home: isHomeFriendly(ex),
     gif,
     thumb,
-    steps: steps.filter(Boolean),
   });
+
+  // steps 不进 catalog.json，单独落盘（理由见 OUT_STEPS）
+  stepsById[ex.id] = steps.filter(Boolean);
 }
 
 // 按「部位 → 中文名」排序，让同类动作聚在一起
@@ -169,6 +191,7 @@ out.sort((a, b) => {
 });
 
 fs.writeFileSync(OUT, JSON.stringify(out));
+fs.writeFileSync(OUT_STEPS, JSON.stringify(stepsById));
 
 // ---- 报告 ----
 const stat = (f) => {
@@ -178,7 +201,7 @@ const stat = (f) => {
 };
 console.log('总动作数:', out.length, '（源', raw.length, '）');
 console.log('缺中文名:', out.filter((x) => !x.nameZh).length);
-console.log('缺中文步骤:', out.filter((x) => x.steps.length === 0).length);
+console.log('缺中文步骤:', Object.values(stepsById).filter((s) => s.length === 0).length);
 console.log('缺 GIF:', out.filter((x) => !x.gif).length);
 console.log('\n计量方式:', stat((x) => x.metric).map(([k, v]) => k + '=' + v).join('  '));
 console.log('拉伸:', out.filter((x) => x.stretch).length, '| 可在家:', out.filter((x) => x.home).length);
@@ -188,4 +211,6 @@ console.log('\n目标肌肉(前12):', stat((x) => x.targetZh).slice(0, 12).map((
 console.log('\n未翻译的 target:', [...new Set(out.filter((x) => x.target && x.targetZh === x.target).map((x) => x.target))].join(', ') || '(无)');
 console.log('未翻译的 equipment:', [...new Set(out.filter((x) => x.equipment && x.equipmentZh === x.equipment).map((x) => x.equipment))].join(', ') || '(无)');
 console.log('未翻译的肌肉:', [...new Set(out.flatMap((x) => x.secondary.filter((s) => s.zh === s.en).map((s) => s.en)))].join(', ') || '(无)');
-console.log('\n产出:', OUT, (fs.statSync(OUT).size / 1024 / 1024).toFixed(2), 'MB');
+console.log('\n产出:', OUT, (fs.statSync(OUT).size / 1024).toFixed(1), 'KB');
+console.log('产出:', OUT_STEPS, (fs.statSync(OUT_STEPS).size / 1024).toFixed(1), 'KB',
+  '（' + Object.keys(stepsById).length + ' 个动作的步骤，首屏不加载）');

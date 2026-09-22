@@ -2,6 +2,13 @@ const fs = require('fs');
 const path = require('path');
 
 const catalog = require('./src/lib/catalog.json');
+/**
+ * 分步说明已从 catalog.json 拆到 public/catalog-steps.json（见 lib/steps.ts）。
+ * 这里必须读新文件 —— 早先它读的是 `catalog[i].steps`，拆包后那个字段不存在了，
+ * 会把 1318 条全判成「缺中文步骤」。这个脚本只打印不断言，所以不会报错，
+ * 但数字会失真。顺带把两个文件的 id 一致性也校验上。
+ */
+const stepsMap = require('./public/catalog-steps.json');
 const GIF = 'public/media/gif';
 const THUMB = 'public/media/thumb';
 
@@ -29,7 +36,7 @@ console.log('缺失缩略图:', missingThumb.length, missingThumb.slice(0, 8));
 
 // 顺便核对中文字段完整度
 const noZh = catalog.filter((e) => !e.nameZh);
-const noSteps = catalog.filter((e) => !e.steps || e.steps.length === 0);
+const noSteps = catalog.filter((e) => !stepsMap[e.id] || stepsMap[e.id].length === 0);
 const noTargetZh = catalog.filter((e) => !e.targetZh);
 const noEquipZh = catalog.filter((e) => !e.equipmentZh);
 const noPartZh = catalog.filter((e) => !e.bodyPartZh);
@@ -38,6 +45,14 @@ console.log('缺中文步骤:', noSteps.length);
 console.log('缺 targetZh:', noTargetZh.length, noTargetZh.slice(0, 5).map((e) => e.target));
 console.log('缺 equipmentZh:', noEquipZh.length, noEquipZh.slice(0, 5).map((e) => e.equipment));
 console.log('缺 bodyPartZh:', noPartZh.length);
+
+// catalog 与 steps 两个文件的 id 必须一一对应，否则会静默丢步骤
+const catIds = new Set(catalog.map((e) => e.id));
+const stepIds = new Set(Object.keys(stepsMap));
+const onlyInCat = [...catIds].filter((id) => !stepIds.has(id));
+const onlyInSteps = [...stepIds].filter((id) => !catIds.has(id));
+console.log('\ncatalog 有而 steps 没有:', onlyInCat.length, onlyInCat.slice(0, 5));
+console.log('steps 有而 catalog 没有:', onlyInSteps.length, onlyInSteps.slice(0, 5));
 
 // 度量分布
 const byMetric = {};

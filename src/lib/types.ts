@@ -48,10 +48,11 @@ export interface Exercise {
   gif: string | null;
   /** 180×180 缩略图文件名（public/media/thumb/ 下） */
   thumb: string | null;
-  /** 中文分步说明 */
-  steps: string[];
-  // 这里原本还有 `instructions`，已删除：它全量等于 steps.join(' ')（1318/1318），
-  // 是纯冗余，单独占 catalog 的 51%。需要整段文案时用 steps.join(' ')。
+  // 这里原本还有 `steps: string[]`，已移出 catalog：
+  // 它占 catalog 的 42.8%（469KB raw / 72KB gzip），却只有详情页和计时页用得上。
+  // 现在单独放在 public/catalog-steps.json，由 lib/steps.ts 异步加载
+  // （`stepsFor(id)`）。要读步骤请用那个模块，别再往这个类型里加回来。
+  // 另：原 `instructions` 字段也已删除 —— 它全量等于 steps.join(' ')，纯冗余。
 }
 
 export interface SetsRep {

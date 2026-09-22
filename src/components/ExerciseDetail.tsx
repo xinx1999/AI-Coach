@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { X, Plus, Check, Home, Dumbbell, Star, Heart, Repeat, Timer, Route, Target } from 'lucide-react';
 import { gifPath, thumbPath, displayName, type ClassifiedExercise } from '../lib/store';
+import { EMPTY_STEPS, stepsFor, subscribeSteps } from '../lib/steps';
 import ExercisePlayer from './ExercisePlayer';
 import GuidePanel from './GuidePanel';
 
@@ -29,6 +30,14 @@ export default function ExerciseDetail({
 }: Props) {
   const modalRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // 分步说明不在 catalog 里，要订阅异步加载完成（见 lib/steps.ts）。
+  // 未加载完时返回稳定的空数组，播放器对空步骤已有守卫（steps.length > 0）。
+  const steps = useSyncExternalStore(
+    subscribeSteps,
+    () => stepsFor(exercise.id),
+    () => EMPTY_STEPS, // SSR 快照
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -106,7 +115,7 @@ export default function ExerciseDetail({
               gifSrc={gif}
               thumbSrc={thumb}
               alt={zhName}
-              steps={exercise.steps ?? []}
+              steps={steps}
             />
           </div>
 

@@ -1,7 +1,8 @@
+import { useSyncExternalStore } from 'react';
 import { Activity, AlertTriangle, Wind } from 'lucide-react';
 import { getExercise } from '../lib/store';
 import { COACHING_DISCLAIMER, coachingFor } from '../lib/coaching';
-import type { Exercise } from '../lib/types';
+import { EMPTY_STEPS, stepsFor, subscribeSteps } from '../lib/steps';
 
 interface Props {
   slug: string;
@@ -31,9 +32,17 @@ interface Props {
  */
 export default function GuidePanel({ slug, compact = false, stepsHandled = false }: Props) {
   const ex = getExercise(slug);
+
+  // 步骤不在 catalog 里了（见 lib/steps.ts），要订阅异步加载完成才会重渲染。
+  // hook 不能放在下面的 early return 之后，所以这里先算好。
+  const steps = useSyncExternalStore(
+    subscribeSteps,
+    () => (ex ? stepsFor(ex.id) : EMPTY_STEPS),
+    () => EMPTY_STEPS, // SSR 快照
+  );
+
   if (!ex) return null;
 
-  const steps = ex.steps ?? [];
   const tip = coachingFor(ex);
   const hasSteps = steps.length > 0;
   /** 步骤由外部呈现时，这里不再重复列 */
@@ -100,9 +109,4 @@ export default function GuidePanel({ slug, compact = false, stepsHandled = false
       {!compact && <p className="guide-note">{COACHING_DISCLAIMER}</p>}
     </section>
   );
-}
-
-/** 供其他组件直接取步骤，避免各自重复实现 */
-export function stepsOf(ex: Exercise): string[] {
-  return ex.steps ?? [];
 }

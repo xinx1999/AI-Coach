@@ -5,6 +5,7 @@ import BuildView from './components/BuildView';
 import HistoryView from './components/HistoryView';
 import PlanWizard from './components/PlanWizard';
 import { usePersistentState } from './lib/persist';
+import { loadSteps } from './lib/steps';
 import { ASSET_ATTRIBUTION, ATTRIBUTION_LINE } from './lib/attribution';
 import {
   ACTIVE_SESSION_KEY,
@@ -98,6 +99,14 @@ export default function App() {
   useEffect(() => {
     window.location.hash = screen;
   }, [screen]);
+
+  // 分步说明不在 catalog.json 里，单独一个文件（见 lib/steps.ts）。
+  // 这里立刻发起、**不 await** —— 让它的请求与首屏渲染并行。
+  // 用户从首屏到点开一个动作通常要 1 秒以上，步骤基本都已就位，看不到跳动。
+  // 失败也不阻断：拿不到就是「没有步骤」，页面照常用。
+  useEffect(() => {
+    void loadSteps();
+  }, []);
 
   const selectedSlugs = useMemo(() => workout.map((w) => w.slug), [workout]);
 

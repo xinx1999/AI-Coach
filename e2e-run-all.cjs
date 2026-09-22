@@ -49,6 +49,7 @@ const SUITES = [
   'verify-coaching.cjs',
   'verify-fix.cjs',
   'verify-media.cjs',
+  'verify-steps.cjs',
 ];
 
 /**
